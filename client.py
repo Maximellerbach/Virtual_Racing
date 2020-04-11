@@ -277,7 +277,7 @@ class predicting_client():
                 break
 
 if __name__ == "__main__":
-    model = load_model('lightv6_mix.h5', compile=False)
+    model = load_model('models\\lightv6_mix.h5', compile=False)
     
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
     #     model = load_model('lane_keeper.h5')
