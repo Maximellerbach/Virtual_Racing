@@ -300,9 +300,12 @@ if __name__ == "__main__":
     min_throttle = 0.2
     sq = 0.75 # modify steering by: s**sq 
     mult = 1. # usually 1
-    buffer_time = 0.2
+    buffer_time = 0.0
 
     settings = (delta_steer, target_speed, max_throttle, min_throttle, sq, mult)
+
+    client_modes = [driving_client.autonomous_loop, driving_client.autonomous_manual_loop, driving_client.manual_loop]
+
     clients = []
 
     for i in range(num_clients):
@@ -324,10 +327,10 @@ if __name__ == "__main__":
         # driving_client.autonomous_loop(cat2st=True, transform=True, smooth=True, random=False)
 
         ### MANUAL RECOVERY VERSION ###
-        # driving_client.autonomous_manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
+        # driving_client.autonomous_manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=False)
         
         ### MANUAL VERSION ###
-        # driving_client.manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
+        # driving_client.manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=False)
 
         clients.append(driving_client)
         time.sleep(interval)
