@@ -180,12 +180,13 @@ class SimpleClient(SDClient):
         direction = round(st*4)+7
         # print(direction) # should be [3, 5, 7, 9, 11]
         tmp_img = img[self.crop:]
-        cv2.resize(tmp_img, (160,120))
+        tmp_img = cv2.resize(tmp_img, (160,120))
         cv2.imwrite(self.dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
 
-    def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"]): # TODO: do this function
+    def get_keyboard(self, toogle_key=["a"], keys=["left", "up", "right"], bkeys=["down"]): # TODO: do this function
         pressed = []
         bpressed = []
+        tpressed = []
         bfactor = 1
         manual = False
 
@@ -198,8 +199,10 @@ class SimpleClient(SDClient):
         if any(bpressed):
             bfactor = -1
         
+        for tk in toogle_key:
+            tpressed.append(keyboard.is_pressed(tk))
 
-        if any(pressed+bpressed):
+        if any(pressed+bpressed+tpressed):
             manual = True
 
 
@@ -263,7 +266,7 @@ class predicting_client():
                 print("stopped client", self.name)
                 break
 
-    def manual_loop(self, cat2st=True, transform=True, smooth=True, random=False, record=False):
+    def manual_loop(self, cat2st=True, transform=True, smooth=True, random=False, record=True):
         self.client.update(0, throttle=0.0, brake=0.1)
         delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.client.PID_settings
         while(True):
@@ -307,10 +310,10 @@ if __name__ == "__main__":
     interval= 4.0
     fps = 20
 
-    delta_steer = 0.1 # do not needed if np.average is used in smoothing function
-    target_speed = 10
-    max_throttle = 1. # if you set max_throttle=min_throttle then throttle will be cte
-    min_throttle = 0.5
+    delta_steer = 0.05 # do not needed if np.average is used in smoothing function
+    target_speed = 20
+    max_throttle = 0.8 # if you set max_throttle=min_throttle then throttle will be cte
+    min_throttle = 0.6
     sq = 0.5
     mult = 1
     buffer_time = 0.0
@@ -327,17 +330,17 @@ if __name__ == "__main__":
         driving_client.start(load_map=load_map, custom_body=True, custom_cam=False)
         
         ### THREAD VERSION ### 
-        # driving_client.client.model._make_predict_function()
-        # ths.append(threading.Thread(target=select_mode, args=(driving_client, modes[i])))
-        # ths[-1].start() # does not work when using different mode for the moment
-        # print("started Thread", i)
+        driving_client.client.model._make_predict_function()
+        ths.append(threading.Thread(target=select_mode, args=(driving_client, modes[i])))
+        ths[-1].start() # does not work when using different mode for the moment
+        print("started Thread", i)
 
 
         ### NORMAL VERSION ### 
         # driving_client.autonomous_loop(cat2st=True, transform=True, smooth=True, random=False)
 
         ### MANUAL RECOVERY VERSION ###
-        driving_client.autonomous_manual_loop(cat2st=True, transform=True, smooth=True, random=False, record=False)
+        # driving_client.autonomous_manual_loop(cat2st=True, transform=True, smooth=True, random=False, record=False)
         
         ### MANUAL VERSION ###
         # driving_client.manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
