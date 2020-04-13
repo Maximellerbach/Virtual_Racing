@@ -1,5 +1,6 @@
 import numpy as np
 from keras.models import Model, Input
+from keras.layers import Activation
 
 def transform_st(st, sq, mult):
     if st >= 0:
@@ -53,4 +54,9 @@ def cat2linear(cat, coef=[-1, -0.5, 0, 0.5, 1], av=False):
 
 def add_softmax(model, shape=(120, 160, 3)): # TODO
     inp = Input(shape)
-    return
+
+    x = model(inp)
+    y = Activation('softmax')(x)
+
+    new_model = Model(inp, y)
+    return new_model
