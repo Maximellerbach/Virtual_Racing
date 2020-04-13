@@ -5,7 +5,7 @@ def transform_st(st, sq, mult):
         return (st*mult)**sq
     return -np.absolute(st*mult)**sq
 
-def smoothing_st(st, previous_st, delta_steer):
+def smoothing_st(st, previous_st, thr_steer):
     # delta = st-previous_st
     # if delta>delta_steer:
     #     return previous_st+delta_steer
@@ -13,7 +13,9 @@ def smoothing_st(st, previous_st, delta_steer):
     #     return previous_st-delta_steer
     # return st
 
-    return np.average([st, previous_st])
+    if np.absolute(st)>=thr_steer:
+        return np.average([st, previous_st])
+    return 0
 
 def cat2linear(cat, coef=[-1, -0.5, 0, 0.5, 1], av=False):
 

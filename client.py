@@ -33,7 +33,7 @@ set_session(sess) # set this TensorFlow session as the default
 ###########################################
 
 class SimpleClient(SDClient):
-    def __init__(self, address, model, PID_settings=(0.5, 0.5, 1, 1), poll_socket_sleep_time=0.01, buffer_time=0.1, name='0', dir_save="C:\\Users\\maxim\\virtual_imgs\\"):
+    def __init__(self, address, model, PID_settings=(0.5, 0.5, 0.1, 1, 1), poll_socket_sleep_time=0.01, buffer_time=0.1, name='0', dir_save="C:\\Users\\maxim\\virtual_imgs\\"):
         super().__init__(*address, poll_socket_sleep_time=poll_socket_sleep_time)
         self.last_image = None
         self.car_loaded = False
@@ -134,7 +134,7 @@ class SimpleClient(SDClient):
     def predict_st(self, cat2st=True, transform=True, smooth=True, random=True, coef=[-1, -0.5, 0, 0.5, 1]):
         if self.to_process==True:
             img = self.last_image
-            delta_steer, target_speed, max_throttle, sq, mult = self.PID_settings
+            delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
             
             img = img[self.crop:, :, :] # crop img to be as close as training data as possible
             img = cv2.resize(img, (160,120))
@@ -159,6 +159,8 @@ class SimpleClient(SDClient):
                 optimal_acc = (optimal_acc**0.1)*(1-np.absolute(st))
                 if optimal_acc > max_throttle:
                     optimal_acc = max_throttle
+                elif optimal_acc < min_throttle:
+                    optimal_acc = min_throttle
 
 
             else:
@@ -226,8 +228,8 @@ class predicting_client():
     def generate_random_color(self):
         return np.random.randint(0, 255, size=(3))
 
-    def autonomous_loop(self, cat2st=True, transform=True, smooth=True): # TODO: add record on autonomous (pass by predict_st for last_img record)
-        while(self.client.aborted==False):
+    def autonomous_loop(self, cat2st=True, transform=True, smooth=True, random=False): # TODO: add record on autonomous (pass by predict_st for last_img record)
+        while(True):
             self.client.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
 
             if self.client.aborted == True:
@@ -246,6 +248,7 @@ class predicting_client():
                 self.client.update(manual_st, throttle=0.5)
                 if record == True and self.client.to_process==True:
                     self.client.save_img(self.client.last_image, manual_st)
+                    self.client.to_process = False
             else:
                 self.client.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
             
@@ -266,7 +269,9 @@ class predicting_client():
                 if record == True and self.client.to_process==True:
                     self.client.save_img(self.client.last_image, manual_st)
                     self.to_process = False
-            
+            else:
+                self.client.update(manual_st, throttle=0.0, brake=0.1)
+
             if self.client.aborted == True:
                 msg = '{ "msg_type" : "exit_scene" }'
                 self.client.send(msg)
@@ -277,7 +282,7 @@ class predicting_client():
                 break
 
 if __name__ == "__main__":
-    model = load_model('models\\lightv6_mix.h5', compile=False)
+    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\lightv6_mix.h5', compile=False)
     
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
     #     model = load_model('lane_keeper.h5')
@@ -285,18 +290,19 @@ if __name__ == "__main__":
 
     host = "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
-    num_clients = 3
+    num_clients = 1
     interval= 4.0
     fps = 20
 
-    delta_steer = 0.1 # do not needed if np.average is used in smoothing function
-    target_speed = 10
-    max_throttle = 0.5
-    sq = 0.5
-    mult = 2
-    buffer_time = 0.0
+    delta_steer = 0.05 # do not needed if np.average is used in smoothing function
+    target_speed = 13
+    max_throttle = 0.8 # setting max_throttle = min_throttle will get you a constant speed
+    min_throttle = 0.2
+    sq = 0.75 # modify steering by: s**sq 
+    mult = 1. # usually 1
+    buffer_time = 0.2
 
-    settings = (delta_steer, target_speed, max_throttle, sq, mult)
+    settings = (delta_steer, target_speed, max_throttle, min_throttle, sq, mult)
     clients = []
 
     for i in range(num_clients):
@@ -305,13 +311,13 @@ if __name__ == "__main__":
         else:
             load_map = False
 
-        driving_client = predicting_client(model, host="127.0.0.1", port=9091, PID_settings=settings, buffer_time=buffer_time, name=str(i)) # PID_settings=settings
+        driving_client = predicting_client(model, host=host, port=port, PID_settings=settings, buffer_time=buffer_time, name=str(i)) # PID_settings=settings
         driving_client.start(load_map=load_map, custom_body=True, custom_cam=False)
         
         ### THREAD VERSION ### 
-        # driving_client.client.model._make_predict_function()
-        # threading.Thread(target=driving_client.autonomous_loop, args=(True, True, True, False)).start()
-        # print("started Thread", i)
+        driving_client.client.model._make_predict_function()
+        threading.Thread(target=driving_client.autonomous_loop, args=(True, True, True, False)).start()
+        print("started Thread", i)
 
 
         ### NORMAL VERSION ### 
@@ -321,7 +327,7 @@ if __name__ == "__main__":
         # driving_client.autonomous_manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
         
         ### MANUAL VERSION ###
-        driving_client.manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
+        # driving_client.manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
 
         clients.append(driving_client)
         time.sleep(interval)
