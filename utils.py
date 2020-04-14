@@ -20,11 +20,14 @@ def smoothing_st(st, previous_st, thr_steer): # TODO: do somthing better to smoo
     return 0
 
 def opt_acc(st, current_speed, max_throttle, min_throttle, target_speed):
+    dt_throttle = max_throttle-min_throttle
+
     optimal_acc = ((target_speed-current_speed)/target_speed)
     if optimal_acc < 0:
         optimal_acc = 0
 
-    optimal_acc = (optimal_acc**0.1)*(1-np.absolute(st))
+    optimal_acc = min_throttle+((optimal_acc**0.1)*(1-np.absolute(st)))*dt_throttle
+
     if optimal_acc > max_throttle:
         optimal_acc = max_throttle
     elif optimal_acc < min_throttle:

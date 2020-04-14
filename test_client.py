@@ -52,26 +52,30 @@ class SimpleClient(SDClient):
         self.dir_save = dir_save
 
     def on_msg_recv(self, json_packet):
-        msg_type = json_packet['msg_type']
-        if msg_type == "car_loaded":
-            self.car_loaded = True
-        
-        elif msg_type == "telemetry":
-            self.delay_buffer(json_packet, self.buffer_time)
-            # self.last_image = image
-            # self.to_process = True
+        try:
+            msg_type = json_packet['msg_type']
+            if msg_type == "car_loaded":
+                self.car_loaded = True
             
-            ### Disabled buffer for the moment
-            imgString = json_packet["image"]
-            tmp_img = np.asarray(Image.open(BytesIO(base64.b64decode(imgString))))
-            self.last_image = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
-            self.to_process = True
-            self.current_speed = json_packet["speed"]
+            elif msg_type == "telemetry":
+                self.delay_buffer(json_packet, self.buffer_time)
+                # self.last_image = image
+                # self.to_process = True
+                
+                ### Disabled buffer for the moment
+                imgString = json_packet["image"]
+                tmp_img = np.asarray(Image.open(BytesIO(base64.b64decode(imgString))))
+                self.last_image = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
+                self.to_process = True
+                self.current_speed = json_packet["speed"]
 
-            # self.cte_history.append(json_packet["cte"])
+                # self.cte_history.append(json_packet["cte"])
 
-        elif msg_type == "aborted":
-            self.aborted = True
+            elif msg_type == "aborted":
+                self.aborted = True
+
+        except:
+            print(json_packet)
 
 
     def start(self, load_map=True, map_msg='', custom_body=True, body_msg='', custom_cam=True, cam_msg='', color=[20, 20, 20]):
@@ -229,6 +233,7 @@ class predicting_client():
 
     def autonomous_loop(self, cat2st=True, transform=True, smooth=True, random=False): # TODO: add record on autonomous (pass by predict_st for last_img record)
         self.client.update(0, throttle=0.0, brake=0.1)
+        print('entering main loop')
         while(True):
             self.client.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
 
@@ -241,9 +246,10 @@ class predicting_client():
                 print("stopped client", self.name)
                 break
 
-    def autonomous_manual_loop(self, cat2st=True, transform=True, smooth=True, random=False, record=False):
+    def autonomous_manual_loop(self, cat2st=True, transform=True, smooth=True, random=False, record=True):
         self.client.update(0, throttle=0.0, brake=0.1)
         delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.client.PID_settings
+        print('entering main loop')
         while(True):
             toogle_manual, manual_st, bk = self.client.get_keyboard()
 
@@ -253,6 +259,8 @@ class predicting_client():
 
                 if record == True and self.client.to_process == True:
                     self.client.save_img(self.client.last_image, manual_st)
+
+                self.client.to_process = False
 
             else:
                 self.client.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
@@ -269,6 +277,7 @@ class predicting_client():
     def manual_loop(self, cat2st=True, transform=True, smooth=True, random=False, record=True):
         self.client.update(0, throttle=0.0, brake=0.1)
         delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.client.PID_settings
+        print('entering main loop')
         while(True):
             toogle_manual, manual_st, bk = self.client.get_keyboard()
 
@@ -278,7 +287,8 @@ class predicting_client():
 
                 if record == True and self.client.to_process==True:
                     self.client.save_img(self.client.last_image, manual_st)
-                    self.to_process = False
+
+                self.to_process = False
 
             else:
                 self.client.update(0, throttle=0.0, brake=0.1)
@@ -307,14 +317,13 @@ if __name__ == "__main__":
 
     host = "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
-    interval= 4.0
-    fps = 20
+    interval= 2.0
 
     delta_steer = 0.05 # do not needed if np.average is used in smoothing function
-    target_speed = 20
-    max_throttle = 0.8 # if you set max_throttle=min_throttle then throttle will be cte
-    min_throttle = 0.6
-    sq = 0.5
+    target_speed = 10
+    max_throttle = 0.7 # if you set max_throttle=min_throttle then throttle will be cte
+    min_throttle = 0.4
+    sq = 0.75
     mult = 1
     buffer_time = 0.0
 
@@ -332,7 +341,7 @@ if __name__ == "__main__":
         ### THREAD VERSION ### 
         driving_client.client.model._make_predict_function()
         ths.append(threading.Thread(target=select_mode, args=(driving_client, modes[i])))
-        ths[-1].start() # does not work when using different mode for the moment
+        ths[-1].start()
         print("started Thread", i)
 
 
