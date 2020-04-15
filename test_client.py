@@ -86,7 +86,7 @@ class SimpleClient(SDClient):
             else:
                 msg = map_msg
             self.send(msg)
-            print("sended map!")
+            # print("sended map!")
 
             loaded = False
             while(not loaded):
@@ -100,7 +100,7 @@ class SimpleClient(SDClient):
                 msg = body_msg
             self.send(msg)
             time.sleep(1.0)
-            print("sended custom body style!")
+            # print("sended custom body style!")
 
         if custom_cam:
             if cam_msg == '':
@@ -109,10 +109,10 @@ class SimpleClient(SDClient):
                 msg = cam_msg
             self.send(msg)
             time.sleep(1.0)
-            print("sended custom camera settings!")
+            # print("sended custom camera settings!")
 
         # self.update(0, throttle=0, brake=0.1)
-        print("car loaded, ready to go!")
+        print(self.name, "car loaded, ready to go!")
 
     def send_controls(self, steering, throttle, brake):
         p = { "msg_type" : "control",
@@ -202,6 +202,11 @@ class SimpleClient(SDClient):
 
     def generate_random_color(self):
         return np.random.randint(0, 255, size=(3))
+    
+    def rdm_color_start(self, load_map=True, custom_body=True, custom_cam=False, color=[]):
+        if color == []:
+            color = self.generate_random_color()
+        self.start(load_map=load_map, custom_body=custom_body, custom_cam=custom_cam, color=color)
 
     def save_img(self, img, st):
         direction = round(st*4)+7
@@ -210,101 +215,117 @@ class SimpleClient(SDClient):
         tmp_img = cv2.resize(tmp_img, (160,120))
         cv2.imwrite(self.dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
         
-class predicting_client():
+
+class auto_client(SimpleClient):
     def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
-        self.name = name
-        self.client = SimpleClient((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=self.name, buffer_time=buffer_time)
+        super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
+        self.model._make_predict_function()
+        self.rdm_color_start()
+        self.t = threading.Thread(target=self.loop)
+        self.t.start()
 
-    def start(self, load_map=True, custom_body=True, custom_cam=False, color=[]):
-        if color == []:
-            color = self.client.generate_random_color()
-        self.client.start(load_map=load_map, custom_body=custom_body, custom_cam=custom_cam, color=color)
-
-
-    def autonomous_loop(self, cat2st=True, transform=True, smooth=False, random=False): # TODO: add record on autonomous (pass by predict_st for last_img record)
-        self.client.update(0, throttle=0.0, brake=0.1)
+    def loop(self, cat2st=True, transform=True, smooth=False, random=False): # TODO: add record on autonomous (pass by predict_st for last_img record)
+        self.update(0, throttle=0.0, brake=0.1)
         print('entering main loop')
         while(True):
-            self.client.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
+            self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
 
-            if self.client.aborted == True:
+            if self.aborted == True:
                 msg = '{ "msg_type" : "exit_scene" }'
-                self.client.send(msg)
+                self.send(msg)
                 time.sleep(1.0)
 
-                self.client.stop()
+                self.stop()
                 print("stopped client", self.name)
                 break
 
-    def autonomous_manual_loop(self, cat2st=True, transform=True, smooth=True, random=False, record=True):
-        self.client.update(0, throttle=0.0, brake=0.1)
-        delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.client.PID_settings
+class semiauto_client(SimpleClient):
+    def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+        super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
+        self.model._make_predict_function()
+        self.rdm_color_start()
+        self.t = threading.Thread(target=self.loop)
+        self.t.start()
+
+    def loop(self, cat2st=True, transform=True, smooth=True, random=False, record=True):
+        self.update(0, throttle=0.0, brake=0.1)
+        delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
         print('entering main loop')
         while(True):
-            toogle_manual, manual_st, bk = self.client.get_keyboard()
+            toogle_manual, manual_st, bk = self.get_keyboard()
 
             if toogle_manual == True:
-                throttle = opt_acc(manual_st, self.client.current_speed, max_throttle, min_throttle, target_speed)
-                self.client.update(manual_st, throttle=throttle*bk)
+                throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
+                self.update(manual_st, throttle=throttle*bk)
 
-                if record == True and self.client.to_process == True:
-                    self.client.save_img(self.client.last_image, manual_st)
+                if record == True and self.to_process == True:
+                    self.save_img(self.last_image, manual_st)
 
                 if random:
                     manual_st = add_random(manual_st)
-                self.client.to_process = False
+                self.to_process = False
 
             else:
-                self.client.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
+                self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
             
-            if self.client.aborted == True:
+            if self.aborted == True:
                 msg = '{ "msg_type" : "exit_scene" }'
-                self.client.send(msg)
+                self.send(msg)
                 time.sleep(1.0)
 
-                self.client.stop()
+                self.stop()
                 print("stopped client", self.name)
                 break
 
-    def manual_loop(self, cat2st=True, transform=True, smooth=False, random=False, record=True):
-        self.client.update(0, throttle=0.0, brake=0.1)
-        delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.client.PID_settings
+
+class manual_client(SimpleClient):
+    def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+        super().__init__((host, port), [], sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
+        self.model._make_predict_function()
+        self.rdm_color_start()
+        self.t = threading.Thread(target=self.loop)
+        self.t.start()
+
+    def loop(self, cat2st=True, transform=True, smooth=False, random=False, record=True):
+        self.update(0, throttle=0.0, brake=0.1)
+        delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
         print('entering main loop')
         while(True):
-            toogle_manual, manual_st, bk = self.client.get_keyboard()
+            toogle_manual, manual_st, bk = self.get_keyboard()
             
             if toogle_manual == True:
-                throttle = opt_acc(manual_st, self.client.current_speed, max_throttle, min_throttle, target_speed)
+                throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
 
-                if record == True and self.client.to_process==True:
-                    self.client.save_img(self.client.last_image, manual_st)
+                if record == True and self.to_process==True:
+                    self.save_img(self.last_image, manual_st)
 
                 if random:
                     manual_st = add_random(manual_st, 0.3, 0.4)
 
-                self.client.update(manual_st, throttle=throttle*bk)
+                self.update(manual_st, throttle=throttle*bk)
                 self.to_process = False
 
             else:
-                self.client.update(0, throttle=0.0, brake=0.1)
+                self.update(0, throttle=0.0, brake=0.1)
 
             
-            if self.client.aborted == True:
+            if self.aborted == True:
                 msg = '{ "msg_type" : "exit_scene" }'
-                self.client.send(msg)
+                self.send(msg)
                 time.sleep(1.0)
 
-                self.client.stop()
+                self.stop()
                 print("stopped client", self.name)
                 break
 
-def select_mode(obj, mode_index):
-    mode_list = [obj.autonomous_loop, obj.autonomous_manual_loop, obj.manual_loop]
-    mode_list[mode_index]()
+
+def select_mode(mode_index):
+    obj_list = [auto_client, semiauto_client, manual_client]
+    return obj_list[mode_index]
+
 
 if __name__ == "__main__":
     model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\lightv6_mix.h5', compile=False)
-    # model = add_softmax(model)
     
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
     #     model = load_model('lane_keeper.h5')
@@ -313,13 +334,13 @@ if __name__ == "__main__":
     host = "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
     interval= 2.0
-    fps = 50
+    fps = 30
     sleep_time = 1/fps
 
     delta_steer = 0.05 # steering value where you consider the car to go straight
     target_speed = 10
     max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-    min_throttle = 0.55
+    min_throttle = 0.5
     sq = 1 # modify steering by : st ** sq
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
@@ -332,14 +353,10 @@ if __name__ == "__main__":
     load_map = True
     for i in range(len(modes)):
 
-        driving_client = predicting_client(model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, buffer_time=buffer_time, name=str(i)) # PID_settings=settings
-        driving_client.start(load_map=load_map, custom_body=True, custom_cam=False)
-        
-        ### THREAD VERSION with modes### 
-        driving_client.client.model._make_predict_function()
-        ths.append(threading.Thread(target=select_mode, args=(driving_client, modes[i])))
-        ths[-1].start()
-        print("started Thread", i)
+        ### THREAD VERSION ### 
+        client = select_mode(modes[i])
+        client(model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, buffer_time=buffer_time, name=str(i))
+        print("started client", i)
 
 
         ### NORMAL VERSION ### 

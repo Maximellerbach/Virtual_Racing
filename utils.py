@@ -70,4 +70,4 @@ def add_softmax(model, shape=(120, 160, 3)): # TODO
     new_model = Model(inp, y)
     return new_model
 
-# TODO: need a function to calculate optimal st with current speed
+# TODO: function to calculate optimal st with current speed (not needed for the moment)
