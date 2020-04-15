@@ -174,12 +174,6 @@ class SimpleClient(SDClient):
             return st
         return 0
 
-    def save_img(self, img, st): # TODO: do this function
-        direction = round(st*4)+7
-        # print(direction) # should be [3, 5, 7, 9, 11]
-        tmp_img = img[self.crop:]
-        tmp_img = cv2.resize(tmp_img, (160,120))
-        cv2.imwrite(self.dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
 
     def get_keyboard(self, disable_keys=["a"], keys=["left", "up", "right"], bkeys=["down"]):
         pressed = []
@@ -206,7 +200,16 @@ class SimpleClient(SDClient):
         # print(keys_st, pressed)
         return manual, keys_st, bfactor
 
+    def generate_random_color(self):
+        return np.random.randint(0, 255, size=(3))
 
+    def save_img(self, img, st):
+        direction = round(st*4)+7
+        # print(direction) # should be [3, 5, 7, 9, 11]
+        tmp_img = img[self.crop:]
+        tmp_img = cv2.resize(tmp_img, (160,120))
+        cv2.imwrite(self.dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
+        
 class predicting_client():
     def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         self.name = name
@@ -214,11 +217,9 @@ class predicting_client():
 
     def start(self, load_map=True, custom_body=True, custom_cam=False, color=[]):
         if color == []:
-            color = self.generate_random_color()
+            color = self.client.generate_random_color()
         self.client.start(load_map=load_map, custom_body=custom_body, custom_cam=custom_cam, color=color)
 
-    def generate_random_color(self):
-        return np.random.randint(0, 255, size=(3))
 
     def autonomous_loop(self, cat2st=True, transform=True, smooth=False, random=False): # TODO: add record on autonomous (pass by predict_st for last_img record)
         self.client.update(0, throttle=0.0, brake=0.1)
@@ -312,19 +313,19 @@ if __name__ == "__main__":
     host = "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
     interval= 2.0
-    fps = 30
+    fps = 50
     sleep_time = 1/fps
 
     delta_steer = 0.05 # steering value where you consider the car to go straight
     target_speed = 10
     max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-    min_throttle = 0.5
-    sq = 0.8 # modify steering by : st ** sq
+    min_throttle = 0.55
+    sq = 1 # modify steering by : st ** sq
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
 
     settings = (delta_steer, target_speed, max_throttle, min_throttle, sq, mult)
-    modes = [0, 0]
+    modes = [0, 0, 0]
 
 
     ths = []
