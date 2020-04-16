@@ -51,7 +51,7 @@ class AutoInterface(): # single interface object for 1 client
 
         if record_button:
             self.record_bool = BooleanVar()
-            b = Checkbutton(self.window, text="Record", variable=bvar, onvalue=True, offvalue=False, command=self.get_record)
+            b = Checkbutton(self.window, text="Record", variable=self.record_bool, onvalue=True, offvalue=False, command=self.get_record)
             b.grid(row=off_y, column=5)
             self.record_bool
     
