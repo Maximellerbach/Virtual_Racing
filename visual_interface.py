@@ -11,7 +11,7 @@ class windowInterface(Tk): # screen to display interface for ALL client
         self.off_y += space
 
 class AutoInterface(): # single interface object for 1 client
-    def __init__(self, window, client_class, screen_size=(512, 512), name="Auto_0"):
+    def __init__(self, window, client_class, screen_size=(512, 512), name="Auto_0", record_button=False):
         self.window = window
         self.client_class = client_class
 
@@ -19,16 +19,19 @@ class AutoInterface(): # single interface object for 1 client
         self.name = name
 
         self.scales_value = [] # list of scales objects in interface
+        self.scale_default = self.client_class.PID_settings
+        self.box_default = self.client_class.loop_settings
+
         self.values = [] # list of values of scales in interface
         self.bool_checkbox = [] # list of checkbox objects in interface
 
-        self.add_interface()
+        self.add_interface(record_button)
 
 
-    def add_interface(self, scale_labels=["steer_threshold", "target_speed", "max_throttle", "min_throttle", "sq", "mult"], from_to=[(0.2, 0), (0, 30), (0, 1), (0, 1), (0.5, 2), (0.5, 2)]):
+    def add_interface(self, record_button, scale_labels=["steer_threshold", "target_speed", "max_throttle", "min_throttle", "sq", "mult"], from_to=[(0.2, 0), (0, 30), (0, 1), (0, 1), (0.5, 2), (0.5, 2)]):
         off_y = self.window.off_y
         Button(self.window, text="Respawn", command=self.respawn).grid(row=off_y, column=0)
-        Button(self.window, text="Reset to default", command=self.set_slider_value).grid(row=off_y, column=1)
+        Button(self.window, text="Reset to default", command=self.reset).grid(row=off_y, column=1)
 
 
         bvar = BooleanVar()
@@ -45,6 +48,12 @@ class AutoInterface(): # single interface object for 1 client
         b = Checkbutton(self.window, text="Random", variable=bvar, onvalue=True, offvalue=False, command=self.get_checkbox_value)
         b.grid(row=off_y, column=4)
         self.bool_checkbox.append(bvar)
+
+        if record_button:
+            self.record_bool = BooleanVar()
+            b = Checkbutton(self.window, text="Record", variable=bvar, onvalue=True, offvalue=False, command=self.get_record)
+            b.grid(row=off_y, column=5)
+            self.record_bool
     
         for it, label, scale_range in zip(range(len(scale_labels)), scale_labels, from_to):
             value = DoubleVar() # dummy value
@@ -52,11 +61,7 @@ class AutoInterface(): # single interface object for 1 client
             s.grid(row=off_y+1, column=it)
             self.scales_value.append(value)
         
-        self.set_slider_value() # set to default settings
-        self.get_slider_value() # get those values and set PID setting to those values
-        self.set_checkbox_value()
-        self.get_checkbox_value()
-
+        self.reset()
         self.window.increment(space=2) # add 1 to the client counter on the screen and add some offset to avoid overlapping
 
     def respawn(self):
@@ -76,20 +81,25 @@ class AutoInterface(): # single interface object for 1 client
 
         self.client_class.loop_settings = bools
 
-    def set_slider_value(self):
-        assert len(self.client_class.PID_settings) == len(self.scales_value)
+    def get_record(self, v=0):
+        self.client_class.record = self.record_bool.get()
 
-        for value, scale in zip(self.client_class.PID_settings, self.scales_value):
+    def set_slider_value(self):
+        assert len(self.scale_default) == len(self.scales_value)
+
+        for value, scale in zip(self.scale_default, self.scales_value):
             scale.set(value)
     
     def set_checkbox_value(self):
-        assert len(self.client_class.loop_settings) == len(self.bool_checkbox)
+        assert len(self.box_default) == len(self.bool_checkbox)
 
-        for value, box in zip(self.client_class.loop_settings, self.bool_checkbox):
+        for value, box in zip(self.box_default, self.bool_checkbox):
             box.set(value)
 
-    def set_default(self, default=[]): # TODO
-        pass
+    def reset(self):
+        self.set_slider_value()
+        self.set_checkbox_value()
+
 
 if __name__ == "__main__":
     from run_client import manual_client

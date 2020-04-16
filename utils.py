@@ -35,10 +35,10 @@ def opt_acc(st, current_speed, max_throttle, min_throttle, target_speed):
 
     return optimal_acc
 
-def add_random(st, frc=0.1, mult=0.2):
+def add_random(st, frc=0.5, mult=0.2):
     rdm_bool = np.random.choice([True, False], p=[frc, 1-frc]) # add some noise to the direction to see robustness
     if rdm_bool:
-        return st+np.random.random()*mult
+        return st+(np.random.random()-0.5)*mult
     return st
     
 def cat2linear(cat, coef=[-1, -0.5, 0, 0.5, 1], av=False):

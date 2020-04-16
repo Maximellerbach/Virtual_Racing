@@ -225,7 +225,7 @@ class auto_client(SimpleClient):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
-        self.loop_settings = [True, False, False]
+        self.loop_settings = (True, False, False)
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -253,14 +253,15 @@ class semiauto_client(SimpleClient):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
-        self.loop_settings = [True, False, False]
+        self.loop_settings = (True, False, False)
+        self.record = False
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
         
-        AutoInterface(window, self)
+        AutoInterface(window, self, record_button=True)
 
-    def loop(self, cat2st=True, record=False):
+    def loop(self, cat2st=True):
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
@@ -272,7 +273,7 @@ class semiauto_client(SimpleClient):
                 throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
                 self.update(manual_st, throttle=throttle*bk)
 
-                if record == True and self.to_process == True:
+                if self.record == True and self.to_process == True:
                     self.save_img(self.last_image, manual_st)
 
                 if random:
@@ -296,14 +297,15 @@ class manual_client(SimpleClient):
     def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), "no model required here", sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.rdm_color_start()
-        self.loop_settings = [True, False, False]
+        self.loop_settings = (True, False, False)
+        self.record = False
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
 
-        AutoInterface(window, self)
+        AutoInterface(window, self, record_button=True)
 
-    def loop(self, cat2st=True, record=False):
+    def loop(self, cat2st=True):
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
@@ -314,7 +316,7 @@ class manual_client(SimpleClient):
             if toogle_manual == True:
                 throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
 
-                if record == True and self.to_process==True:
+                if self.record == True and self.to_process==True:
                     self.save_img(self.last_image, manual_st)
 
                 if random:
@@ -363,7 +365,7 @@ if __name__ == "__main__":
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
 
-    clients_modes = [0, 0] # clients to spawn
+    clients_modes = [0, 1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
     settings = [delta_steer, target_speed, max_throttle, min_throttle, sq, mult] # can be changed in graphic interface
 
     window = windowInterface() # create window
