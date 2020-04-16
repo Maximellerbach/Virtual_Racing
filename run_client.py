@@ -18,6 +18,7 @@ from PIL import Image
 
 from gym_donkeycar.core.sim_client import SDClient
 from utils import cat2linear, smoothing_st, transform_st, opt_acc, add_softmax, add_random
+import visual_interface
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True # dynamically grow the memory used on the GPU
@@ -78,6 +79,9 @@ class SimpleClient(SDClient):
             pass
             # print(json_packet)
 
+    def reset_car(self):
+        msg = '{ "msg_type" : "reset_car" }'
+        self.send(msg)
 
     def start(self, load_map=True, map_msg='', custom_body=True, body_msg='', custom_cam=True, cam_msg='', color=[20, 20, 20]):
         if load_map:
@@ -112,7 +116,7 @@ class SimpleClient(SDClient):
             # print("sended custom camera settings!")
 
         # self.update(0, throttle=0, brake=0.1)
-        print(self.name, "car loaded, ready to go!")
+        # print("car loaded, ready to go!", self.name)
 
     def send_controls(self, steering, throttle, brake):
         p = { "msg_type" : "control",
@@ -221,13 +225,14 @@ class auto_client(SimpleClient):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
+        # self.interface = visual_interface.AutoInterface(self, name=self.name) # TODO: make it thread safe
         self.t = threading.Thread(target=self.loop)
         self.t.start()
 
-    def loop(self, cat2st=True, transform=True, smooth=False, random=False): # TODO: add record on autonomous (pass by predict_st for last_img record)
+    def loop(self, cat2st=True, transform=True, smooth=True, random=False):
         self.update(0, throttle=0.0, brake=0.1)
-        print('entering main loop')
         while(True):
+            # self.interface.update()
             self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
 
             if self.aborted == True:
@@ -244,14 +249,15 @@ class semiauto_client(SimpleClient):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
+        # self.interface = visual_interface.AutoInterface(self, name=self.name) # TODO: make it thread safe
         self.t = threading.Thread(target=self.loop)
         self.t.start()
 
-    def loop(self, cat2st=True, transform=True, smooth=True, random=False, record=True):
+    def loop(self, cat2st=True, transform=True, smooth=True, random=False, record=False):
         self.update(0, throttle=0.0, brake=0.1)
         delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
-        print('entering main loop')
         while(True):
+            # self.interface.update()
             toogle_manual, manual_st, bk = self.get_keyboard()
 
             if toogle_manual == True:
@@ -283,14 +289,15 @@ class manual_client(SimpleClient):
         super().__init__((host, port), [], sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
+        # self.interface = visual_interface.AutoInterface(self, name=self.name) # TODO: make it thread safe
         self.t = threading.Thread(target=self.loop)
         self.t.start()
 
-    def loop(self, cat2st=True, transform=True, smooth=False, random=False, record=True):
+    def loop(self, cat2st=True, transform=True, smooth=False, random=False, record=False):
         self.update(0, throttle=0.0, brake=0.1)
         delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
-        print('entering main loop')
         while(True):
+            # self.interface.update()
             toogle_manual, manual_st, bk = self.get_keyboard()
             
             if toogle_manual == True:
@@ -331,7 +338,7 @@ if __name__ == "__main__":
     #     model = load_model('lane_keeper.h5')
     # model.summary()
 
-    host = "127.0.0.1" # "trainmydonkey.com" for virtual racing server
+    host = "127.0.0.1" # "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
     interval= 2.0
     fps = 30
@@ -345,28 +352,18 @@ if __name__ == "__main__":
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
 
-    settings = (delta_steer, target_speed, max_throttle, min_throttle, sq, mult)
-    modes = [0, 0, 0]
+    settings = [(delta_steer, target_speed, max_throttle, min_throttle, sq, mult)]*2
+    clients_modes = [0, 0] # clients to spawn
 
 
     ths = []
     load_map = True
-    for i in range(len(modes)):
+    for i in range(len(clients_modes)):
 
         ### THREAD VERSION ### 
-        client = select_mode(modes[i])
-        client(model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, buffer_time=buffer_time, name=str(i))
+        client = select_mode(clients_modes[i])
+        client(model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings[i], buffer_time=buffer_time, name=str(i))
         print("started client", i)
 
-
-        ### NORMAL VERSION ### 
-        # driving_client.autonomous_loop(cat2st=True, transform=True, smooth=True, random=False)
-
-        ### MANUAL RECOVERY VERSION ###
-        # driving_client.autonomous_manual_loop(cat2st=True, transform=True, smooth=True, random=False, record=False)
-        
-        ### MANUAL VERSION ###
-        # driving_client.manual_loop(cat2st=True, transform=True, smooth=False, random=False, record=True)
-
-        time.sleep(interval)
+        time.sleep(interval) # wait a bit to add an other client
         load_map = False

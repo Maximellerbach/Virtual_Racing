@@ -7,7 +7,7 @@ def transform_st(st, sq, mult):
         return (st*mult)**sq
     return -np.absolute(st*mult)**sq
 
-def smoothing_st(st, previous_st, thr_steer): # TODO: do somthing better to smooth the direction
+def smoothing_st(st, previous_st, thr_steer):
     # delta = st-previous_st
     # if delta>delta_steer:
     #     return previous_st+delta_steer
