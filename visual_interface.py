@@ -100,6 +100,8 @@ class AutoInterface(): # single interface object for 1 client
         self.set_slider_value()
         self.set_checkbox_value()
 
+        self.get_slider_value()
+        self.get_checkbox_value()
 
 if __name__ == "__main__":
     from run_client import manual_client

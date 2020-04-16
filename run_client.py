@@ -17,7 +17,7 @@ from keras.utils import CustomObjectScope
 from PIL import Image
 
 from gym_donkeycar.core.sim_client import SDClient
-from utils import cat2linear, smoothing_st, transform_st, opt_acc, add_softmax, add_random
+from utils import cat2linear, st2cat, smoothing_st, transform_st, opt_acc, add_softmax, add_random
 from visual_interface import windowInterface, AutoInterface
 
 config = tf.ConfigProto()
@@ -46,7 +46,7 @@ class SimpleClient(SDClient):
         self.packet_buffer = []
         self.cte_history = []
 
-        self.name = name
+        self.name = str(name)
         self.model = model
         self.PID_settings = PID_settings
         self.buffer_time = buffer_time
@@ -136,11 +136,11 @@ class SimpleClient(SDClient):
     def update(self, st, throttle=1.0, brake=0.0):
         self.send_controls(st, throttle, brake)
 
-    def predict_st(self, cat2st=True, transform=True, smooth=True, random=True, coef=[-1, -0.5, 0, 0.5, 1]):
+    def predict_st(self, cat2st=True, transform=True, smooth=True, random=True, record=False, coef=[-1, -0.5, 0, 0.5, 1], save_path=""):
         if self.to_process==True:
             img = self.last_image
             delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
-            
+
             img = img[self.crop:, :, :] # crop img to be as close as training data as possible
             img = cv2.resize(img, (160,120))
 
@@ -175,6 +175,11 @@ class SimpleClient(SDClient):
 
             self.to_process = False
             self.previous_st = st
+
+            if record:
+                direction = st2cat(st)
+                cv2.imwrite(save_path+str(direction)+"_"+str(time.time())+".png", img)
+
             return st
         return 0
 
@@ -226,18 +231,24 @@ class auto_client(SimpleClient):
         self.model._make_predict_function()
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
+        self.record = False
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
         
-        AutoInterface(window, self)
+        AutoInterface(window, self, record_button=True)
 
     def loop(self, cat2st=True, transform=True, smooth=True, random=False):
+
+        save_path = "C:\\Users\\maxim\\recorded_imgs\\"+self.name+"\\" # for the moment stays here, no need to specify the save path
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             transform, smooth, random = self.loop_settings
             
-            self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
+            self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random, record=self.record, save_path=save_path)
 
             if self.aborted == True:
                 msg = '{ "msg_type" : "exit_scene" }'
@@ -305,6 +316,7 @@ class manual_client(SimpleClient):
 
         AutoInterface(window, self, record_button=True)
 
+
     def loop(self, cat2st=True):
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
@@ -354,7 +366,7 @@ if __name__ == "__main__":
     host = "127.0.0.1" # "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
     interval= 1.0
-    fps = 20
+    fps = 30
     sleep_time = 1/fps
 
     delta_steer = 0.05 # steering value where you consider the car to go straight

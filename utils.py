@@ -61,6 +61,9 @@ def cat2linear(cat, coef=[-1, -0.5, 0, 0.5, 1], av=False):
             st += nyx*coef[ait]
     return st
 
+def st2cat(st): # maps every -1; 1 value to rounded direction value : [3, 5, 7, 9, 11]
+    return int(round(st*2)*2+7)
+
 def add_softmax(model, shape=(120, 160, 3)): # TODO
     inp = Input(shape)
 
