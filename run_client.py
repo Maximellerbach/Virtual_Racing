@@ -18,7 +18,7 @@ from PIL import Image
 
 from gym_donkeycar.core.sim_client import SDClient
 from utils import cat2linear, smoothing_st, transform_st, opt_acc, add_softmax, add_random
-import visual_interface
+from visual_interface import windowInterface, AutoInterface
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True # dynamically grow the memory used on the GPU
@@ -166,8 +166,8 @@ class SimpleClient(SDClient):
             if smooth:
                 st = smoothing_st(st, self.previous_st, delta_steer)
             if random:
-                st = add_random(st)                
-            
+                st = add_random(st)   
+
             self.update(st, throttle=optimal_acc)
 
             # cv2.imshow('img_'+str(self.name), img) # cause problems with threaded prediction
@@ -221,18 +221,22 @@ class SimpleClient(SDClient):
         
 
 class auto_client(SimpleClient):
-    def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
-        # self.interface = visual_interface.AutoInterface(self, name=self.name) # TODO: make it thread safe
+        self.loop_settings = [True, False, False]
+
         self.t = threading.Thread(target=self.loop)
         self.t.start()
+        
+        AutoInterface(window, self)
 
     def loop(self, cat2st=True, transform=True, smooth=True, random=False):
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
-            # self.interface.update()
+            transform, smooth, random = self.loop_settings
+            
             self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
 
             if self.aborted == True:
@@ -245,19 +249,23 @@ class auto_client(SimpleClient):
                 break
 
 class semiauto_client(SimpleClient):
-    def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.model._make_predict_function()
         self.rdm_color_start()
-        # self.interface = visual_interface.AutoInterface(self, name=self.name) # TODO: make it thread safe
+        self.loop_settings = [True, False, False]
+
         self.t = threading.Thread(target=self.loop)
         self.t.start()
+        
+        AutoInterface(window, self)
 
-    def loop(self, cat2st=True, transform=True, smooth=True, random=False, record=False):
+    def loop(self, cat2st=True, record=False):
         self.update(0, throttle=0.0, brake=0.1)
-        delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
         while(True):
-            # self.interface.update()
+            delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
+            transform, smooth, random = self.loop_settings
+
             toogle_manual, manual_st, bk = self.get_keyboard()
 
             if toogle_manual == True:
@@ -285,19 +293,22 @@ class semiauto_client(SimpleClient):
 
 
 class manual_client(SimpleClient):
-    def __init__(self, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
-        super().__init__((host, port), [], sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
-        self.model._make_predict_function()
+    def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+        super().__init__((host, port), "no model required here", sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.rdm_color_start()
-        # self.interface = visual_interface.AutoInterface(self, name=self.name) # TODO: make it thread safe
+        self.loop_settings = [True, False, False]
+
         self.t = threading.Thread(target=self.loop)
         self.t.start()
 
-    def loop(self, cat2st=True, transform=True, smooth=False, random=False, record=False):
+        AutoInterface(window, self)
+
+    def loop(self, cat2st=True, record=False):
         self.update(0, throttle=0.0, brake=0.1)
-        delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
         while(True):
-            # self.interface.update()
+            delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
+            transform, smooth, random = self.loop_settings
+
             toogle_manual, manual_st, bk = self.get_keyboard()
             
             if toogle_manual == True:
@@ -340,8 +351,8 @@ if __name__ == "__main__":
 
     host = "127.0.0.1" # "127.0.0.1" # "trainmydonkey.com" for virtual racing server
     port = 9091
-    interval= 2.0
-    fps = 30
+    interval= 1.0
+    fps = 20
     sleep_time = 1/fps
 
     delta_steer = 0.05 # steering value where you consider the car to go straight
@@ -352,9 +363,10 @@ if __name__ == "__main__":
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
 
-    settings = [(delta_steer, target_speed, max_throttle, min_throttle, sq, mult)]*2
     clients_modes = [0, 0] # clients to spawn
+    settings = [delta_steer, target_speed, max_throttle, min_throttle, sq, mult] # can be changed in graphic interface
 
+    window = windowInterface() # create window
 
     ths = []
     load_map = True
@@ -362,8 +374,10 @@ if __name__ == "__main__":
 
         ### THREAD VERSION ### 
         client = select_mode(clients_modes[i])
-        client(model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings[i], buffer_time=buffer_time, name=str(i))
+        client(window, model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, buffer_time=buffer_time, name=str(i))
         print("started client", i)
 
         time.sleep(interval) # wait a bit to add an other client
         load_map = False
+
+    window.mainloop() # only display when everything is loaded to avoid threads to be blocked !
