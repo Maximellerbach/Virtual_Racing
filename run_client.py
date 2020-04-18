@@ -34,7 +34,7 @@ set_session(sess) # set this TensorFlow session as the default
 ###########################################
 
 class SimpleClient(SDClient):
-    def __init__(self, address, model, sleep_time=0.05, PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, name='0', dir_save="C:\\Users\\maxim\\virtual_imgs\\"):
+    def __init__(self, address, model, sleep_time=0.01, PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, name='0', dir_save="C:\\Users\\maxim\\virtual_imgs\\"):
         super().__init__(*address, poll_socket_sleep_time=sleep_time)
         self.last_image = None
         self.car_loaded = False
@@ -170,15 +170,15 @@ class SimpleClient(SDClient):
 
             self.update(st, throttle=optimal_acc)
 
-            # cv2.imshow('img_'+str(self.name), img) # cause problems with threaded prediction
+            # cv2.imshow('img_'+str(self.name), img) # cause problems with multi threading
             # cv2.waitKey(1)
 
             self.to_process = False
             self.previous_st = st
 
             if record:
-                direction = st2cat(st)
-                cv2.imwrite(save_path+str(direction)+"_"+str(time.time())+".png", img)
+                # direction = st2cat(st)
+                cv2.imwrite(save_path+str(st)+"_"+str(time.time())+".png", img)
 
             return st
         return 0
@@ -239,8 +239,8 @@ class auto_client(SimpleClient):
         AutoInterface(window, self, record_button=True)
 
     def loop(self, cat2st=True, transform=True, smooth=True, random=False):
-
-        save_path = "C:\\Users\\maxim\\recorded_imgs\\"+self.name+"\\" # for the moment stays here, no need to specify the save path
+        
+        save_path = "C:\\Users\\maxim\\recorded_imgs\\"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
@@ -377,7 +377,7 @@ if __name__ == "__main__":
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
 
-    clients_modes = [0, 1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
+    clients_modes = [0] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
     settings = [delta_steer, target_speed, max_throttle, min_throttle, sq, mult] # can be changed in graphic interface
 
     window = windowInterface() # create window

@@ -28,7 +28,7 @@ class AutoInterface(): # single interface object for 1 client
         self.add_interface(record_button)
 
 
-    def add_interface(self, record_button, scale_labels=["steer_threshold", "target_speed", "max_throttle", "min_throttle", "sq", "mult"], from_to=[(0.2, 0), (0, 30), (0, 1), (0, 1), (0.5, 2), (0.5, 2)]):
+    def add_interface(self, record_button, scale_labels=["steer_threshold", "target_speed", "max_throttle", "min_throttle", "sq", "mult"], from_to=[(0.2, 0), (0, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2)]):
         off_y = self.window.off_y
         Button(self.window, text="Respawn", command=self.respawn).grid(row=off_y, column=0)
         Button(self.window, text="Reset to default", command=self.reset).grid(row=off_y, column=1)
