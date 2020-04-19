@@ -1,4 +1,7 @@
+import os
+from glob import glob
 from tkinter import *
+
 
 class windowInterface(Tk): # screen to display interface for ALL client
     def __init__(self, name="basic interface"):
@@ -28,7 +31,7 @@ class AutoInterface(): # single interface object for 1 client
         self.add_interface(record_button)
 
 
-    def add_interface(self, record_button, scale_labels=["steer_threshold", "target_speed", "max_throttle", "min_throttle", "sq", "mult"], from_to=[(0.2, 0), (0, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2)]):
+    def add_interface(self, record_button, scale_labels=["steer_threshold", "target_speed", "max_throttle", "min_throttle", "sq", "mult"], from_to=[(0.2, 0), (1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2)]):
         off_y = self.window.off_y
         Button(self.window, text="Respawn", command=self.respawn).grid(row=off_y, column=0)
         Button(self.window, text="Reset to default", command=self.reset).grid(row=off_y, column=1)
@@ -83,6 +86,12 @@ class AutoInterface(): # single interface object for 1 client
 
     def get_record(self, v=0):
         self.client_class.record = self.record_bool.get()
+        
+        if not os.path.exists(self.client_class.save_path) and self.client_class.record == True: # create the dir in order to be able to save img
+            os.makedirs(self.client_class.save_path)
+
+        if os.path.exists(self.client_class.save_path) and self.client_class.record == False and len(glob(self.client_class.save_path+"*"))==0: # delete the dir if no items are inside
+            os.rmdir(self.client_class.save_path)
 
     def set_slider_value(self):
         assert len(self.scale_default) == len(self.scales_value)

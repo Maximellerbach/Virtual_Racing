@@ -34,7 +34,7 @@ set_session(sess) # set this TensorFlow session as the default
 ###########################################
 
 class SimpleClient(SDClient):
-    def __init__(self, address, model, sleep_time=0.01, PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, name='0', dir_save="C:\\Users\\maxim\\virtual_imgs\\"):
+    def __init__(self, address, model, sleep_time=0.01, PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, name='0'):
         super().__init__(*address, poll_socket_sleep_time=sleep_time)
         self.last_image = None
         self.car_loaded = False
@@ -50,7 +50,6 @@ class SimpleClient(SDClient):
         self.model = model
         self.PID_settings = PID_settings
         self.buffer_time = buffer_time
-        self.dir_save = dir_save
 
     def on_msg_recv(self, json_packet):
         try:
@@ -59,18 +58,12 @@ class SimpleClient(SDClient):
                 self.car_loaded = True
             
             elif msg_type == "telemetry":
-                self.delay_buffer(json_packet, self.buffer_time)
-                # self.last_image = image
-                # self.to_process = True
-                
                 ### Disabled buffer for the moment
                 imgString = json_packet["image"]
                 tmp_img = np.asarray(Image.open(BytesIO(base64.b64decode(imgString))))
                 self.last_image = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
                 self.to_process = True
                 self.current_speed = json_packet["speed"]
-
-                # self.cte_history.append(json_packet["cte"])
 
             elif msg_type == "aborted":
                 self.aborted = True
@@ -166,7 +159,7 @@ class SimpleClient(SDClient):
             if smooth:
                 st = smoothing_st(st, self.previous_st, delta_steer)
             if random:
-                st = add_random(st)   
+                st = add_random(st, 0.3, 0.4)   
 
             self.update(st, throttle=optimal_acc)
 
@@ -217,12 +210,13 @@ class SimpleClient(SDClient):
             color = self.generate_random_color()
         self.start(load_map=load_map, custom_body=custom_body, custom_cam=custom_cam, color=color)
 
-    def save_img(self, img, st):
+    def save_img(self, img, st, dir_save):
         direction = round(st*4)+7
         # print(direction) # should be [3, 5, 7, 9, 11]
+
         tmp_img = img[self.crop:]
         tmp_img = cv2.resize(tmp_img, (160,120))
-        cv2.imwrite(self.dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
+        cv2.imwrite(dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
         
 
 class auto_client(SimpleClient):
@@ -232,6 +226,7 @@ class auto_client(SimpleClient):
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
         self.record = False
+        self.save_path = "C:\\Users\\maxim\\recorded_imgs\\0_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -240,15 +235,11 @@ class auto_client(SimpleClient):
 
     def loop(self, cat2st=True, transform=True, smooth=True, random=False):
         
-        save_path = "C:\\Users\\maxim\\recorded_imgs\\"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             transform, smooth, random = self.loop_settings
             
-            self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random, record=self.record, save_path=save_path)
+            self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random, record=self.record, save_path=self.save_path)
 
             if self.aborted == True:
                 msg = '{ "msg_type" : "exit_scene" }'
@@ -266,6 +257,7 @@ class semiauto_client(SimpleClient):
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
         self.record = False
+        self.save_path = "C:\\Users\\maxim\\recorded_imgs\\1_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -273,6 +265,7 @@ class semiauto_client(SimpleClient):
         AutoInterface(window, self, record_button=True)
 
     def loop(self, cat2st=True):
+
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
@@ -285,10 +278,10 @@ class semiauto_client(SimpleClient):
                 self.update(manual_st, throttle=throttle*bk)
 
                 if self.record == True and self.to_process == True:
-                    self.save_img(self.last_image, manual_st)
+                    self.save_img(self.last_image, manual_st, self.save_path)
 
                 if random:
-                    manual_st = add_random(manual_st)
+                    manual_st = add_random(manual_st, 0.3, 0.4)
                 self.to_process = False
 
             else:
@@ -310,6 +303,7 @@ class manual_client(SimpleClient):
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
         self.record = False
+        self.save_path = "C:\\Users\\maxim\\recorded_imgs\\2_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -318,6 +312,7 @@ class manual_client(SimpleClient):
 
 
     def loop(self, cat2st=True):
+
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
@@ -329,7 +324,7 @@ class manual_client(SimpleClient):
                 throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
 
                 if self.record == True and self.to_process==True:
-                    self.save_img(self.last_image, manual_st)
+                    self.save_img(self.last_image, manual_st, self.save_path)
 
                 if random:
                     manual_st = add_random(manual_st, 0.3, 0.4)
@@ -377,7 +372,7 @@ if __name__ == "__main__":
     mult = 1 # modify steering by: st * mult
     buffer_time = 0.0
 
-    clients_modes = [0] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
+    clients_modes = [1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
     settings = [delta_steer, target_speed, max_throttle, min_throttle, sq, mult] # can be changed in graphic interface
 
     window = windowInterface() # create window
