@@ -8,13 +8,6 @@ def transform_st(st, sq, mult):
     return -np.absolute(st*mult)**sq
 
 def smoothing_st(st, previous_st, thr_steer):
-    # delta = st-previous_st
-    # if delta>delta_steer:
-    #     return previous_st+delta_steer
-    # elif delta<-delta_steer:
-    #     return previous_st-delta_steer
-    # return st
-
     if np.absolute(st)>=thr_steer:
         return np.average([st, previous_st])
     return 0

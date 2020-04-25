@@ -45,6 +45,7 @@ class SimpleClient(SDClient):
         self.current_speed = 0
         self.packet_buffer = []
         self.cte_history = []
+        self.previous_brake = []
 
         self.name = str(name)
         self.model = model
@@ -65,6 +66,9 @@ class SimpleClient(SDClient):
                 self.to_process = True
                 self.current_speed = json_packet["speed"]
 
+                # if json_packet["hit"] != 'none':
+                #     print(json_packet["hit"])
+
             elif msg_type == "aborted":
                 self.aborted = True
 
@@ -75,6 +79,9 @@ class SimpleClient(SDClient):
     def reset_car(self):
         msg = '{ "msg_type" : "reset_car" }'
         self.send(msg)
+
+    def delay_buffer(self, img, buffer_time=0.1): # TODO: redo this function
+        return
 
     def start(self, load_map=True, map_msg='', custom_body=True, body_msg='', custom_cam=True, cam_msg='', color=[20, 20, 20]):
         if load_map:
@@ -116,6 +123,7 @@ class SimpleClient(SDClient):
                 "steering" : steering.__str__(),
                 "throttle" : throttle.__str__(),
                 "brake" : brake.__str__()}
+
         msg = json.dumps(p)
         self.send(msg)
 
@@ -123,16 +131,13 @@ class SimpleClient(SDClient):
         time.sleep(self.poll_socket_sleep_sec)
 
 
-    def delay_buffer(self, img, buffer_time=0.1): # TODO: redo this function
-        return
-
     def update(self, st, throttle=1.0, brake=0.0):
         self.send_controls(st, throttle, brake)
 
     def predict_st(self, cat2st=True, transform=True, smooth=True, random=True, record=False, coef=[-1, -0.5, 0, 0.5, 1], save_path=""):
         if self.to_process==True:
             img = self.last_image
-            delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
+            delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold = self.PID_settings
 
             img = img[self.crop:, :, :] # crop img to be as close as training data as possible
             img = cv2.resize(img, (160,120))
@@ -159,10 +164,28 @@ class SimpleClient(SDClient):
             if smooth:
                 st = smoothing_st(st, self.previous_st, delta_steer)
             if random:
-                st = add_random(st, 0.3, 0.4)   
+                st = add_random(st, 0.3, 0.4)
 
-            self.update(st, throttle=optimal_acc)
+            brake = self.brake_model.predict(pred_img)[0][0]
+            if brake>brake_threshold:
+                brake = 1
+            else:
+                brake = 0
 
+            if self.current_speed*brake<turn_speed: # targetted speed*threshold
+                brake = 0
+
+            else:
+                brake = brake*brake_factor
+
+            self.previous_brake.append(brake)
+            if len(self.previous_brake) > 3:
+                del self.previous_brake[0]
+
+            brake_average = np.average(self.previous_brake)
+            self.update(st, throttle=optimal_acc, brake=brake_average)
+            
+            # print(self.current_speed)
             # cv2.imshow('img_'+str(self.name), img) # cause problems with multi threading
             # cv2.waitKey(1)
 
@@ -220,9 +243,12 @@ class SimpleClient(SDClient):
         
 
 class auto_client(SimpleClient):
-    def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
+        self.brake_model = brake_model
         self.model._make_predict_function()
+        self.brake_model._make_predict_function()
+
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
         self.record = False
@@ -230,7 +256,7 @@ class auto_client(SimpleClient):
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
-        
+
         AutoInterface(window, self, record_button=True)
 
     def loop(self, cat2st=True, transform=True, smooth=True, random=False):
@@ -251,9 +277,12 @@ class auto_client(SimpleClient):
                 break
 
 class semiauto_client(SimpleClient):
-    def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
+        self.brake_model = brake_model
         self.model._make_predict_function()
+        self.brake_model._make_predict_function()
+
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
         self.record = False
@@ -268,7 +297,7 @@ class semiauto_client(SimpleClient):
 
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
-            delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
+            delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold = self.PID_settings
             transform, smooth, random = self.loop_settings
 
             toogle_manual, manual_st, bk = self.get_keyboard()
@@ -298,7 +327,7 @@ class semiauto_client(SimpleClient):
 
 
 class manual_client(SimpleClient):
-    def __init__(self, window, model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), "no model required here", sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.rdm_color_start()
         self.loop_settings = (True, False, False)
@@ -315,8 +344,8 @@ class manual_client(SimpleClient):
 
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
-            delta_steer, target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
-            transform, smooth, random = self.loop_settings
+            delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold = self.PID_settings
+            _, _, random = self.loop_settings
 
             toogle_manual, manual_st, bk = self.get_keyboard()
             
@@ -352,28 +381,31 @@ def select_mode(mode_index):
 
 
 if __name__ == "__main__":
+    # os.system("C:\\Users\\maxim\\GITHUB\\Virtual_Racing\\DonkeySimWin\\donkey_sime.exe") #start sim doesn't work for the moment
     model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\lightv6_mix.h5', compile=False)
+    brake_model = load_model('C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\convolution\\brakev6_mix.h5')
+
     
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
     #     model = load_model('lane_keeper.h5')
     # model.summary()
 
-    host = "127.0.0.1" # "127.0.0.1" # "trainmydonkey.com" for virtual racing server
+    host = "trainmydonkey.com" # "127.0.0.1" for local # "trainmydonkey.com" for virtual racing server
     port = 9091
     interval= 1.0
-    fps = 30
-    sleep_time = 1/fps
-
+    sleep_time = 0.01
     delta_steer = 0.05 # steering value where you consider the car to go straight
-    target_speed = 10
+    target_speed = 12
+    turn_speed = 11
     max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
     min_throttle = 0.5
-    sq = 1 # modify steering by : st ** sq
-    mult = 1 # modify steering by: st * mult
-    buffer_time = 0.0
+    sq = 0.8 # modify steering by : st ** sq # can correct some label smoothing effects
+    mult = 1 # modify steering by: st * mult (kind act as a sensivity setting
+    brake_factor = 0.8
+    brake_threshold = 0.9
 
     clients_modes = [1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
-    settings = [delta_steer, target_speed, max_throttle, min_throttle, sq, mult] # can be changed in graphic interface
+    settings = [delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold] # can be changed in graphic interface
 
     window = windowInterface() # create window
 
@@ -383,7 +415,7 @@ if __name__ == "__main__":
 
         ### THREAD VERSION ### 
         client = select_mode(clients_modes[i])
-        client(window, model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, buffer_time=buffer_time, name=str(i))
+        client(window, model, brake_model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, name=str(i))
         print("started client", i)
 
         time.sleep(interval) # wait a bit to add an other client
