@@ -390,32 +390,33 @@ if __name__ == "__main__":
     #     model = load_model('lane_keeper.h5')
     # model.summary()
 
-    mode = 1
-    interval= 1.0
+    config = 1
 
-    if mode == 1:
+    interval= 1.0
+    port = 9091
+
+    if config == 0:
         host = "trainmydonkey.com"
-        port = 9091
         sleep_time = 0.01
         delta_steer = 0.05 # steering value where you consider the car to go straight
         target_speed = 12
         turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
         min_throttle = 0.5
-        sq = 1 # modify steering by : st ** sq # can correct some label smoothing effects
+        sq = 0.8 # modify steering by : st ** sq # can correct some label smoothing effects
         mult = 1 # modify steering by: st * mult (kind act as a sensivity setting
-        brake_factor = 0.8
-        brake_threshold = 0.9
-    else:
+        brake_factor = 0.9
+        brake_threshold = 0.8
+        
+    elif config == 1:
         host = "127.0.0.1"
-        port = 9091
         sleep_time = 0.01
         delta_steer = 0.05 # steering value where you consider the car to go straight
         target_speed = 13.5
         turn_speed = 12
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
         min_throttle = 0.7
-        sq = 0.2 # modify steering by : st ** sq # can correct some label smoothing effects
+        sq = 0.8 # modify steering by : st ** sq # can correct some label smoothing effects
         mult = 1 # modify steering by: st * mult (kind act as a sensivity setting
         brake_factor = 0.9
         brake_threshold = 0.8
