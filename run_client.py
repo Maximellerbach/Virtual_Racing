@@ -83,12 +83,9 @@ class SimpleClient(SDClient):
     def delay_buffer(self, img, buffer_time=0.1): # TODO: redo this function
         return
 
-    def start(self, load_map=True, map_msg='', custom_body=True, body_msg='', custom_cam=True, cam_msg='', color=[20, 20, 20]):
+    def start(self, load_map=True, track='generated_track', custom_body=True, body_msg='', custom_cam=True, cam_msg='', color=[20, 20, 20]):
         if load_map:
-            if map_msg == '':
-                msg = '{ "msg_type" : "load_scene", "scene_name" : "generated_track" }'
-            else:
-                msg = map_msg
+            msg = '{ "msg_type" : "load_scene", "scene_name" : "'+track+'" }'
             self.send(msg)
             # print("sended map!")
 
@@ -149,15 +146,10 @@ class SimpleClient(SDClient):
 
             if cat2st: 
                 st = cat2linear(ny, coef=coef)
-
-
-                optimal_acc = opt_acc(st, self.current_speed, max_throttle, min_throttle, target_speed)
-
-
             else:
-                st, optimal_acc = ny
-                st = st[0][0]
-                optimal_acc = optimal_acc[0][0]
+                st = ny[0][0]
+
+            optimal_acc = opt_acc(st, self.current_speed, max_throttle, min_throttle, target_speed)
 
             if transform:
                 st = transform_st(st, sq, mult)
@@ -167,16 +159,15 @@ class SimpleClient(SDClient):
                 st = add_random(st, 0.3, 0.4)
 
             brake = self.brake_model.predict(pred_img)[0][0]
+            # print(brake)
             if brake>brake_threshold:
                 brake = 1
-            else:
-                brake = 0
 
-            if self.current_speed*brake<turn_speed: # targetted speed*threshold
-                brake = 0
+            if self.current_speed*brake>turn_speed: # targetted speed*threshold
+                brake *= brake_factor
 
             else:
-                brake = brake*brake_factor
+                brake = 0
 
             self.previous_brake.append(brake)
             if len(self.previous_brake) > 3:
@@ -191,6 +182,7 @@ class SimpleClient(SDClient):
 
             self.to_process = False
             self.previous_st = st
+
 
             if record:
                 # direction = st2cat(st)
@@ -228,10 +220,10 @@ class SimpleClient(SDClient):
     def generate_random_color(self):
         return np.random.randint(0, 255, size=(3))
     
-    def rdm_color_start(self, load_map=True, custom_body=True, custom_cam=False, color=[]):
+    def rdm_color_start(self, load_map=True, track='generated_track', custom_body=True, custom_cam=False, color=[]):
         if color == []:
             color = self.generate_random_color()
-        self.start(load_map=load_map, custom_body=custom_body, custom_cam=custom_cam, color=color)
+        self.start(load_map=load_map, track=track, custom_body=custom_body, custom_cam=custom_cam, color=color)
 
     def save_img(self, img, st, dir_save):
         direction = round(st*4)+7
@@ -243,23 +235,23 @@ class SimpleClient(SDClient):
         
 
 class auto_client(SimpleClient):
-    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, track='generated_track', cat2st=True, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.brake_model = brake_model
         self.model._make_predict_function()
         self.brake_model._make_predict_function()
 
-        self.rdm_color_start()
+        self.rdm_color_start(track=track)
         self.loop_settings = (True, False, False)
         self.record = False
         self.save_path = "C:\\Users\\maxim\\recorded_imgs\\0_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
-        self.t = threading.Thread(target=self.loop)
+        self.t = threading.Thread(target=self.loop, args=(cat2st,))
         self.t.start()
 
         AutoInterface(window, self, record_button=True)
 
-    def loop(self, cat2st=True, transform=True, smooth=True, random=False):
+    def loop(self, cat2st, transform=True, smooth=True, random=False):
         
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
@@ -277,23 +269,23 @@ class auto_client(SimpleClient):
                 break
 
 class semiauto_client(SimpleClient):
-    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, track='generated_track', cat2st=True, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), model, sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.brake_model = brake_model
         self.model._make_predict_function()
         self.brake_model._make_predict_function()
 
-        self.rdm_color_start()
+        self.rdm_color_start(track=track)
         self.loop_settings = (True, False, False)
         self.record = False
         self.save_path = "C:\\Users\\maxim\\recorded_imgs\\1_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
-        self.t = threading.Thread(target=self.loop)
+        self.t = threading.Thread(target=self.loop, args=(cat2st,))
         self.t.start()
         
         AutoInterface(window, self, record_button=True)
 
-    def loop(self, cat2st=True):
+    def loop(self, cat2st):
 
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
@@ -327,9 +319,9 @@ class semiauto_client(SimpleClient):
 
 
 class manual_client(SimpleClient):
-    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, track='generated_track', sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
         super().__init__((host, port), "no model required here", sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
-        self.rdm_color_start()
+        self.rdm_color_start(track=track)
         self.loop_settings = (True, False, False)
         self.record = False
         self.save_path = "C:\\Users\\maxim\\recorded_imgs\\2_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
@@ -340,7 +332,7 @@ class manual_client(SimpleClient):
         AutoInterface(window, self, record_button=True)
 
 
-    def loop(self, cat2st=True):
+    def loop(self):
 
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
@@ -354,12 +346,12 @@ class manual_client(SimpleClient):
 
                 if self.record == True and self.to_process==True:
                     self.save_img(self.last_image, manual_st, self.save_path)
+                    self.to_process = False
 
                 if random:
                     manual_st = add_random(manual_st, 0.3, 0.4)
 
                 self.update(manual_st, throttle=throttle*bk)
-                self.to_process = False
 
             else:
                 self.update(0, throttle=0.0, brake=0.1)
@@ -382,8 +374,8 @@ def select_mode(mode_index):
 
 if __name__ == "__main__":
     # os.system("C:\\Users\\maxim\\GITHUB\\Virtual_Racing\\DonkeySimWin\\donkey_sime.exe") #start sim doesn't work for the moment
-    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\lightv6_mix.h5', compile=False)
-    brake_model = load_model('C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\convolution\\brakev6_mix.h5')
+    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linear_mix.h5', compile=False)
+    brake_model = load_model('C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\convolution\\brakev6.h5', compile=False)
 
     
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
@@ -391,6 +383,7 @@ if __name__ == "__main__":
     # model.summary()
 
     config = 1
+    clients_modes = [1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
 
     interval= 1.0
     port = 9091
@@ -398,7 +391,7 @@ if __name__ == "__main__":
     if config == 0:
         host = "trainmydonkey.com"
         sleep_time = 0.01
-        delta_steer = 0.05 # steering value where you consider the car to go straight
+        delta_steer = 0.01 # steering value where you consider the car to go straight
         target_speed = 12
         turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
@@ -410,19 +403,18 @@ if __name__ == "__main__":
         
     elif config == 1:
         host = "127.0.0.1"
-        sleep_time = 0.01
-        delta_steer = 0.05 # steering value where you consider the car to go straight
-        target_speed = 13.5
-        turn_speed = 12
+        sleep_time = 0.05
+        delta_steer = 0.01 # steering value where you consider the car to go straight
+        target_speed = 12.5
+        turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.7
-        sq = 0.8 # modify steering by : st ** sq # can correct some label smoothing effects
-        mult = 1 # modify steering by: st * mult (kind act as a sensivity setting
+        min_throttle = 0.4
+        sq = 1.1 # modify steering by : st ** sq # can correct some label smoothing effects
+        mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
         brake_factor = 0.9
         brake_threshold = 0.8
 
 
-    clients_modes = [0] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
     settings = [delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold] # can be changed in graphic interface
 
     window = windowInterface() # create window
@@ -433,7 +425,7 @@ if __name__ == "__main__":
 
         ### THREAD VERSION ### 
         client = select_mode(clients_modes[i])
-        client(window, model, brake_model, host=host, port=port, sleep_time=sleep_time, PID_settings=settings, name=str(i))
+        client(window, model, brake_model, host=host, port=port, cat2st=False, track='chicane_track', sleep_time=sleep_time, PID_settings=settings, name=str(i))
         print("started client", i)
 
         time.sleep(interval) # wait a bit to add an other client
