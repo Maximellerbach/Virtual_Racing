@@ -400,12 +400,12 @@ if __name__ == "__main__":
         mult = 1 # modify steering by: st * mult (kind act as a sensivity setting
         brake_factor = 0.9
         brake_threshold = 0.8
-        
+
     elif config == 1:
         host = "127.0.0.1"
         sleep_time = 0.05
         delta_steer = 0.01 # steering value where you consider the car to go straight
-        target_speed = 12.5
+        target_speed = 11
         turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
         min_throttle = 0.4
