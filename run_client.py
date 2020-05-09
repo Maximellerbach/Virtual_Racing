@@ -319,7 +319,7 @@ class semiauto_client(SimpleClient):
 
 
 class manual_client(SimpleClient):
-    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, track='generated_track', sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0"):
+    def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, track='generated_track', sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0", cat2st="dontcare"):
         super().__init__((host, port), "no model required here", sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.rdm_color_start(track=track)
         self.loop_settings = (True, False, False)
@@ -403,16 +403,16 @@ if __name__ == "__main__":
 
     elif config == 1:
         host = "127.0.0.1"
-        sleep_time = 0.05
+        sleep_time = 0.01
         delta_steer = 0.01 # steering value where you consider the car to go straight
-        target_speed = 11
+        target_speed = 18
         turn_speed = 11
-        max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.4
-        sq = 1.1 # modify steering by : st ** sq # can correct some label smoothing effects
+        max_throttle = 0.8 # if you set max_throttle=min_throttle then throttle will be cte
+        min_throttle = 0.2
+        sq = 1.0 # modify steering by : st ** sq # can correct some label smoothing effects
         mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
-        brake_factor = 0.9
-        brake_threshold = 0.8
+        brake_factor = 0.
+        brake_threshold = 0.9
 
 
     settings = [delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold] # can be changed in graphic interface
@@ -425,7 +425,7 @@ if __name__ == "__main__":
 
         ### THREAD VERSION ### 
         client = select_mode(clients_modes[i])
-        client(window, model, brake_model, host=host, port=port, cat2st=False, track='chicane_track', sleep_time=sleep_time, PID_settings=settings, name=str(i))
+        client(window, model, brake_model, host=host, port=port, cat2st=False, track='generated_track', sleep_time=sleep_time, PID_settings=settings, name=str(i))
         print("started client", i)
 
         time.sleep(interval) # wait a bit to add an other client
