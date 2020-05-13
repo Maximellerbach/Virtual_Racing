@@ -159,7 +159,6 @@ class SimpleClient(SDClient):
                 st = add_random(st, 0.3, 0.4)
 
             brake = self.brake_model.predict(pred_img)[0][0]
-            # print(brake)
             if brake>brake_threshold:
                 brake = 1
 
@@ -175,17 +174,12 @@ class SimpleClient(SDClient):
 
             brake_average = np.average(self.previous_brake)
             self.update(st, throttle=optimal_acc, brake=brake_average)
-            
-            # print(self.current_speed)
-            # cv2.imshow('img_'+str(self.name), img) # cause problems with multi threading
-            # cv2.waitKey(1)
 
             self.to_process = False
             self.previous_st = st
 
 
             if record:
-                # direction = st2cat(st)
                 cv2.imwrite(save_path+str(st)+"_"+str(time.time())+".png", img)
 
             return st
@@ -225,13 +219,20 @@ class SimpleClient(SDClient):
             color = self.generate_random_color()
         self.start(load_map=load_map, track=track, custom_body=custom_body, custom_cam=custom_cam, color=color)
 
-    def save_img(self, img, st, dir_save):
-        direction = round(st*4)+7
-        # print(direction) # should be [3, 5, 7, 9, 11]
+    def save_img(self, img, st, dir_save, throttle=None, is_float=False):
+        if is_float:
+            direction = st
+        else:
+            direction = round(st*4)+7
+            # print(direction) # should be [3, 5, 7, 9, 11]
 
         tmp_img = img[self.crop:]
         tmp_img = cv2.resize(tmp_img, (160,120))
-        cv2.imwrite(dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
+
+        if throttle == None:
+            cv2.imwrite(dir_save+str(direction)+'_'+str(time.time())+'.png', tmp_img)
+        else:
+            cv2.imwrite(dir_save+str(direction)+'_'+str(throttle)+'_'+str(time.time())+'.png', tmp_img)
         
 
 class auto_client(SimpleClient):
@@ -242,7 +243,7 @@ class auto_client(SimpleClient):
         self.brake_model._make_predict_function()
 
         self.rdm_color_start(track=track)
-        self.loop_settings = (True, False, False)
+        self.loop_settings = [True, False, False, False]
         self.record = False
         self.save_path = "C:\\Users\\maxim\\recorded_imgs\\0_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
@@ -255,7 +256,7 @@ class auto_client(SimpleClient):
         
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
-            transform, smooth, random = self.loop_settings
+            transform, smooth, random, _ = self.loop_settings
             
             self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random, record=self.record, save_path=self.save_path)
 
@@ -276,7 +277,7 @@ class semiauto_client(SimpleClient):
         self.brake_model._make_predict_function()
 
         self.rdm_color_start(track=track)
-        self.loop_settings = (True, False, False)
+        self.loop_settings = [True, False, False, False]
         self.record = False
         self.save_path = "C:\\Users\\maxim\\recorded_imgs\\1_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
@@ -290,20 +291,24 @@ class semiauto_client(SimpleClient):
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold = self.PID_settings
-            transform, smooth, random = self.loop_settings
+            transform, smooth, random, do_overide = self.loop_settings
 
             toogle_manual, manual_st, bk = self.get_keyboard()
 
             if toogle_manual == True:
                 throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
-                self.update(manual_st, throttle=throttle*bk)
 
                 if self.record == True and self.to_process == True:
                     self.save_img(self.last_image, manual_st, self.save_path)
 
-                if random:
-                    manual_st = add_random(manual_st, 0.3, 0.4)
-                self.to_process = False
+                if do_overide:
+                    if random:
+                        manual_st = add_random(manual_st, 0.3, 0.4)
+                    self.update(manual_st, throttle=throttle*bk)
+                    self.to_process = False
+                else:
+                    self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
+
 
             else:
                 self.predict_st(cat2st=cat2st, transform=transform, smooth=smooth, random=random)
@@ -322,7 +327,7 @@ class manual_client(SimpleClient):
     def __init__(self, window, model, brake_model, host = "127.0.0.1", port = 9091, track='generated_track', sleep_time=0.05, PID_settings=(1, 10, 1, 0.5, 1, 1), buffer_time=0.1, name="0", cat2st="dontcare"):
         super().__init__((host, port), "no model required here", sleep_time=sleep_time, PID_settings=PID_settings, name=name, buffer_time=buffer_time)
         self.rdm_color_start(track=track)
-        self.loop_settings = (True, False, False)
+        self.loop_settings = [True, False, False, False]
         self.record = False
         self.save_path = "C:\\Users\\maxim\\recorded_imgs\\2_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
 
@@ -337,7 +342,7 @@ class manual_client(SimpleClient):
         self.update(0, throttle=0.0, brake=0.1)
         while(True):
             delta_steer, target_speed, turn_speed, max_throttle, min_throttle, sq, mult, brake_factor, brake_threshold = self.PID_settings
-            _, _, random = self.loop_settings
+            _, _, random, _ = self.loop_settings
 
             toogle_manual, manual_st, bk = self.get_keyboard()
             
@@ -405,13 +410,13 @@ if __name__ == "__main__":
         host = "127.0.0.1"
         sleep_time = 0.01
         delta_steer = 0.01 # steering value where you consider the car to go straight
-        target_speed = 18
+        target_speed = 15
         turn_speed = 11
-        max_throttle = 0.8 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.2
+        max_throttle = 0.5 # if you set max_throttle=min_throttle then throttle will be cte
+        min_throttle = 0.1
         sq = 1.0 # modify steering by : st ** sq # can correct some label smoothing effects
         mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
-        brake_factor = 0.
+        brake_factor = 0. # disable braking (not viable for the moment)
         brake_threshold = 0.9
 
 

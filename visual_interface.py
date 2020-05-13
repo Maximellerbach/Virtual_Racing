@@ -33,29 +33,46 @@ class AutoInterface(): # single interface object for 1 client
 
     def add_interface(self, record_button, scale_labels=["steer_threshold", "max_speed", "turn_speed", "max_throttle", "min_throttle", "sq", "mult", "brake_factor", "brake_threshold"], from_to=[(0.2, 0), (1, 30), (1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 1), (0, 1)]):
         off_y = self.window.off_y
-        Button(self.window, text="Respawn", command=self.respawn).grid(row=off_y, column=0)
-        Button(self.window, text="Reset to default", command=self.reset).grid(row=off_y, column=1)
+        last_button = 0 
+
+        Button(self.window, text="Respawn", command=self.respawn).grid(row=off_y, column=last_button)
+        last_button += 1
+        Button(self.window, text="Reset to default", command=self.reset).grid(row=off_y, column=last_button)
+        last_button += 1
+        Button(self.window, text="init car", command=self.client_class.rdm_color_start).grid(row=off_y, column=last_button)
+        last_button += 1
 
 
         bvar = BooleanVar()
         b = Checkbutton(self.window, text="Transform st", variable=bvar, onvalue=True, offvalue=False, command=self.get_checkbox_value)
-        b.grid(row=off_y, column=2)
+        b.grid(row=off_y, column=last_button)
+        last_button += 1
         self.bool_checkbox.append(bvar)
 
         bvar = BooleanVar()
         b = Checkbutton(self.window, text="Smooth", variable=bvar, onvalue=True, offvalue=False, command=self.get_checkbox_value)
-        b.grid(row=off_y, column=3)
+        b.grid(row=off_y, column=last_button)
+        last_button += 1
         self.bool_checkbox.append(bvar)
 
         bvar = BooleanVar()
         b = Checkbutton(self.window, text="Random", variable=bvar, onvalue=True, offvalue=False, command=self.get_checkbox_value)
-        b.grid(row=off_y, column=4)
+        b.grid(row=off_y, column=last_button)
+        last_button += 1
         self.bool_checkbox.append(bvar)
+        
+        bvar = BooleanVar()
+        b = Checkbutton(self.window, text="Do_overide_st", variable=bvar, onvalue=True, offvalue=False, command=self.get_checkbox_value)
+        b.grid(row=off_y, column=last_button)
+        last_button += 1
+        self.bool_checkbox.append(bvar)
+        
 
         if record_button:
             self.record_bool = BooleanVar()
             b = Checkbutton(self.window, text="Record", variable=self.record_bool, onvalue=True, offvalue=False, command=self.get_record)
-            b.grid(row=off_y, column=5)
+            b.grid(row=off_y, column=last_button)
+            last_button += 1
             self.record_bool
     
         for it, label, scale_range in zip(range(len(scale_labels)), scale_labels, from_to):
@@ -117,9 +134,9 @@ if __name__ == "__main__":
 
     window = windowInterface()
 
-    client = manual_client(window, "")
+    client = manual_client(window, "", "")
     auto = AutoInterface(window, client)
-    client2 = manual_client(window, "")
+    client2 = manual_client(window, "", "")
     auto2 = AutoInterface(window, client2)
 
     window.mainloop() # display only at the end your window
