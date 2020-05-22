@@ -73,7 +73,6 @@ class AutoInterface(): # single interface object for 1 client
             b = Checkbutton(self.window, text="Record", variable=self.record_bool, onvalue=True, offvalue=False, command=self.get_record)
             b.grid(row=off_y, column=last_button)
             last_button += 1
-            self.record_bool
     
         for it, label, scale_range in zip(range(len(scale_labels)), scale_labels, from_to):
             value = DoubleVar() # dummy value
