@@ -22,7 +22,7 @@ class AutoInterface(): # single interface object for 1 client
         self.name = name
 
         self.scales_value = [] # list of scales objects in interface
-        self.scale_default = self.client_class.PID_settings
+        self.scale_default = self.client_class.PID_settings+[self.client_class.buffer_time*1000]
         self.box_default = self.client_class.loop_settings
 
         self.values = [] # list of values of scales in interface
@@ -31,7 +31,7 @@ class AutoInterface(): # single interface object for 1 client
         self.add_interface(record_button)
 
 
-    def add_interface(self, record_button, scale_labels=["steer_threshold", "max_speed", "turn_speed", "max_throttle", "min_throttle", "sq", "mult", "brake_factor", "brake_threshold"], from_to=[(0.2, 0), (1, 30), (1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 1), (0, 1)]):
+    def add_interface(self, record_button, scale_labels=["steer_threshold", "max_speed", "turn_speed", "max_throttle", "min_throttle", "sq", "mult", "brake_factor", "brake_threshold", "fake_delay"], from_to=[(0.2, 0), (1, 30), (1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 1), (0, 1), (0, 500)]):
         off_y = self.window.off_y
         last_button = 0 
 
@@ -76,7 +76,7 @@ class AutoInterface(): # single interface object for 1 client
     
         for it, label, scale_range in zip(range(len(scale_labels)), scale_labels, from_to):
             value = DoubleVar() # dummy value
-            s = Scale(self.window, resolution=0.1, variable=value, command=self.get_slider_value, label=label, length=75, width=15, from_=scale_range[0], to=scale_range[1])
+            s = Scale(self.window, resolution=0.05, variable=value, command=self.get_slider_value, label=label, length=75, width=15, from_=scale_range[0], to=scale_range[1])
             s.grid(row=off_y+1, column=it)
             self.scales_value.append(value)
         
@@ -91,7 +91,8 @@ class AutoInterface(): # single interface object for 1 client
         for scale in self.scales_value:
             values.append(scale.get())
 
-        self.client_class.PID_settings = values
+        self.client_class.PID_settings = values[:-1]
+        self.client_class.buffer_time = values[-1]/1000
 
     def get_checkbox_value(self, v=0):
         bools = []

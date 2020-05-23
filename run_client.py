@@ -36,7 +36,7 @@ set_session(sess) # set this TensorFlow session as the default
 class SimpleClient(SDClient):
     def __init__(self, address, model, sleep_time=0.01, PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, name='0', use_speed=False):
         super().__init__(*address, poll_socket_sleep_time=sleep_time)
-        self.last_image = None
+        self.last_image = np.zeros((120,160,3))
         self.car_loaded = False
         self.to_process = False
         self.aborted = False
@@ -44,7 +44,7 @@ class SimpleClient(SDClient):
         self.crop = 40
         self.previous_st = 0
         self.current_speed = 0
-        self.packet_buffer = []
+        self.img_buffer = []
         self.cte_history = []
         self.previous_brake = []
 
@@ -63,9 +63,10 @@ class SimpleClient(SDClient):
                 ### Disabled buffer for the moment
                 imgString = json_packet["image"]
                 tmp_img = np.asarray(Image.open(BytesIO(base64.b64decode(imgString))))
-                self.last_image = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
-                cv2.imshow('img', self.last_image)
+                tmp_img = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
+                cv2.imshow('tmp', tmp_img)
                 cv2.waitKey(1)
+                self.delay_buffer(tmp_img)
 
                 self.to_process = True
                 self.current_speed = json_packet["speed"]
@@ -84,8 +85,26 @@ class SimpleClient(SDClient):
         msg = '{ "msg_type" : "reset_car" }'
         self.send(msg)
 
-    def delay_buffer(self, img, buffer_time=0.1): # TODO: redo this function
-        return
+    def delay_buffer(self, img): # TODO: redo this function
+        now = time.time()
+        self.img_buffer.append((img, now))
+        temp_img = None
+        temp_it = None
+        to_remove = []
+        for it, imgt in enumerate(self.img_buffer):
+            if now-imgt[1] > self.buffer_time:
+                temp_img = imgt[0]
+                temp_it = it
+                to_remove.append(it)
+            else:
+                break
+        if len(to_remove)>0:
+            self.last_image = temp_img
+            for _ in range(len(to_remove)):
+                del self.img_buffer[0]
+                del to_remove[0]
+
+
 
     def start(self, load_map=True, track='generated_track', custom_body=True, body_msg='', custom_cam=True, cam_msg='', color=[20, 20, 20]):
         if load_map:
@@ -307,6 +326,8 @@ class semiauto_client(SimpleClient):
             transform, smooth, random, do_overide = self.loop_settings
 
             toogle_manual, manual_st, bk = self.get_keyboard()
+            if transform:
+                manual_st = transform_st(manual_st, sq, mult)
 
             if toogle_manual == True:
                 throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
@@ -397,7 +418,7 @@ def select_mode(mode_index):
 
 if __name__ == "__main__":
     # os.system("C:\\Users\\maxim\\GITHUB\\Virtual_Racing\\DonkeySimWin\\donkey_sime.exe") #start sim doesn't work for the moment
-    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv2_mix.h5', compile=False)
+    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv3_latency.h5', compile=False)
     brake_model = load_model('C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\convolution\\brakev6.h5', compile=False)
 
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
@@ -408,16 +429,17 @@ if __name__ == "__main__":
 
     if config == 0:
         host = "trainmydonkey.com"
-        sleep_time = 0.01
+        sleep_time = 0.02
         delta_steer = 0.01 # steering value where you consider the car to go straight
-        target_speed = 15
+        target_speed = 17
         turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.4
-        sq = 1.3 # modify steering by : st ** sq # can correct some label smoothing effects
-        mult = 1 # modify steering by: st * mult (kind act as a sensivity setting
+        min_throttle = 0.45
+        sq = 1.1 # modify steering by : st ** sq # can correct some label smoothing effects
+        mult = 1.0 # modify steering by: st * mult (kind act as a sensivity setting
         brake_factor = 0.0
         brake_threshold = 0.8
+        fake_delay = 0
 
     elif config == 1:
         host = "127.0.0.1"
@@ -426,11 +448,12 @@ if __name__ == "__main__":
         target_speed = 17
         turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.4
-        sq = 1.5 # modify steering by : st ** sq # can correct some label smoothing effects
-        mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
+        min_throttle = 0.45
+        sq = 1.0 # modify steering by : st ** sq # can correct some label smoothing effects
+        mult = 0.9 # modify steering by: st * mult (act kind as a sensivity setting)
         brake_factor = 0.0 # disable braking (not viable for the moment)
         brake_threshold = 0.8
+        fake_delay = 0.180
 
 
     clients_modes = [1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
@@ -445,7 +468,7 @@ if __name__ == "__main__":
 
         ### THREAD VERSION ### 
         client = select_mode(clients_modes[i])
-        client(window, model, brake_model, host=host, port=port, cat2st=False, track='mountain_track', sleep_time=sleep_time, PID_settings=settings, name=str(i), thread=True, use_speed=True)
+        client(window, model, brake_model, host=host, port=port, cat2st=False, track='mountain_track', sleep_time=sleep_time, PID_settings=settings, name=str(i), thread=True, use_speed=True, buffer_time=fake_delay)
         print("started client", i)
 
         time.sleep(interval) # wait a bit to add an other client

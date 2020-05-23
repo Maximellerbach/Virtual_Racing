@@ -28,6 +28,9 @@ def opt_acc(st, current_speed, max_throttle, min_throttle, target_speed):
 
     return optimal_acc
 
+def boost(st):
+    return
+
 def add_random(st, frc=0.5, mult=0.2):
     rdm_bool = np.random.choice([True, False], p=[frc, 1-frc]) # add some noise to the direction to see robustness
     if rdm_bool:
