@@ -163,7 +163,7 @@ class SimpleClient(SDClient):
             img = cv2.resize(img, (160,120))
 
             pred_img = np.expand_dims(img, axis=0)/255
-            pred_img = pred_img+np.random.random(size=(1,120,160,3))/5 # add some noise to pred to test robustness
+            # pred_img = pred_img+np.random.random(size=(1,120,160,3))/5 # add some noise to pred to test robustness
 
             if self.use_speed:
                 ny = self.model.predict([pred_img, np.expand_dims(self.current_speed, axis=0)])
@@ -418,18 +418,18 @@ def select_mode(mode_index):
 
 if __name__ == "__main__":
     # os.system("C:\\Users\\maxim\\GITHUB\\Virtual_Racing\\DonkeySimWin\\donkey_sime.exe") #start sim doesn't work for the moment
-    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv3_latency.h5', compile=False)
+    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\test.h5', compile=False)
     brake_model = load_model('C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\convolution\\brakev6.h5', compile=False)
 
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
     #     model = load_model('lane_keeper.h5')
     # model.summary()
 
-    config = 0
+    config = 1
 
     if config == 0:
         host = "trainmydonkey.com"
-        sleep_time = 0.02
+        sleep_time = 0.01
         delta_steer = 0.01 # steering value where you consider the car to go straight
         target_speed = 17
         turn_speed = 11
@@ -443,14 +443,14 @@ if __name__ == "__main__":
 
     elif config == 1:
         host = "127.0.0.1"
-        sleep_time = 0.01
+        sleep_time = 0.0001
         delta_steer = 0.01 # steering value where you consider the car to go straight
         target_speed = 17
         turn_speed = 11
         max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
         min_throttle = 0.45
-        sq = 1.0 # modify steering by : st ** sq # can correct some label smoothing effects
-        mult = 0.9 # modify steering by: st * mult (act kind as a sensivity setting)
+        sq = 1.1 # modify steering by : st ** sq # can correct some label smoothing effects
+        mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
         brake_factor = 0.0 # disable braking (not viable for the moment)
         brake_threshold = 0.8
         fake_delay = 0.180
