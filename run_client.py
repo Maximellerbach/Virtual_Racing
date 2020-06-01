@@ -71,8 +71,7 @@ class SimpleClient(SDClient):
                 self.to_process = True
                 self.current_speed = json_packet["speed"]
 
-                # if json_packet["hit"] != 'none':
-                #     print(json_packet["hit"])
+                del json_packet["image"]
 
             elif msg_type == "aborted":
                 self.aborted = True
@@ -418,7 +417,7 @@ def select_mode(mode_index):
 
 if __name__ == "__main__":
     # os.system("C:\\Users\\maxim\\GITHUB\\Virtual_Racing\\DonkeySimWin\\donkey_sime.exe") #start sim doesn't work for the moment
-    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\test.h5', compile=False)
+    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv3_latency.h5', compile=False)
     brake_model = load_model('C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\convolution\\brakev6.h5', compile=False)
 
     # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
@@ -443,7 +442,7 @@ if __name__ == "__main__":
 
     elif config == 1:
         host = "127.0.0.1"
-        sleep_time = 0.0001
+        sleep_time = 0.01
         delta_steer = 0.01 # steering value where you consider the car to go straight
         target_speed = 17
         turn_speed = 11
@@ -468,7 +467,7 @@ if __name__ == "__main__":
 
         ### THREAD VERSION ### 
         client = select_mode(clients_modes[i])
-        client(window, model, brake_model, host=host, port=port, cat2st=False, track='mountain_track', sleep_time=sleep_time, PID_settings=settings, name=str(i), thread=True, use_speed=True, buffer_time=fake_delay)
+        client(window, model, brake_model, host=host, port=port, cat2st=False, track='track_from_points', sleep_time=sleep_time, PID_settings=settings, name=str(i), thread=True, use_speed=True, buffer_time=fake_delay)
         print("started client", i)
 
         time.sleep(interval) # wait a bit to add an other client
