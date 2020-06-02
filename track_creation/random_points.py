@@ -4,14 +4,13 @@ import random as rn
 import cv2
 import numpy as np
 import scipy as sc
-from constants import *
 from scipy import interpolate
 from scipy.spatial import ConvexHull
 
 # defining track width, height and z-axis height
 WIDTH = 200
 HEIGHT = 200
-DEPTH = 20
+DEPTH = 10
 
 # Boundaries for the numbers of points that will be randomly 
 # generated to define the initial polygon used to build the track
@@ -31,7 +30,7 @@ MAX_DISPLACEMENT = 12.5
 # Track difficulty
 DIFFICULTY = 0.1
 # min distance between two points that are part of thr track skeleton
-DISTANCE_BETWEEN_POINTS = 25
+DISTANCE_BETWEEN_POINTS = 50
 # Maximum corner allowed angle
 MAX_ANGLE = 90
 
@@ -49,10 +48,13 @@ class TrackGenerator():
         pts2D = np.transpose(pts2D, (1, 0))
 
         self._hull = ConvexHull(pts2D)
-        self._track_points = self.shape_track(self.get_track_points_from_hull(self._hull, self._points))
+        self._track_points = self.get_track_points_from_hull(self._hull, self._points)
+        # self._track_points = self.smooth_track(self._track_points)
+        
+        self._track_points = self.shape_track(self._track_points)
         self._track_points = self.smooth_track(self._track_points)
 
-        self.modify_track(self._track_points)
+        self.modify_track()
 
         
     def random_points(self, min=MIN_POINTS, max=MAX_POINTS, margin=MARGIN, min_distance=MIN_DISTANCE):
@@ -86,13 +88,33 @@ class TrackGenerator():
         mag = sum(x**2 for x in vec) ** .5
         return [x/mag for x in vec]
 
-    def shape_track(
-        self,
-        track_points,
-        difficulty=DIFFICULTY,
-        max_displacement=MAX_DISPLACEMENT,
-        margin=MARGIN
-    ):
+    def shape_track(self, track_points, difficulty=DIFFICULTY, max_displacement=MAX_DISPLACEMENT, margin=MARGIN):
+        def process_diff(now, prev):
+            diff = np.average(np.array(prev)-np.array(now))
+            return diff
+
+        def get_into_bounds(track_set):
+            # push any point outside screen limits back again
+            pt_set = []
+            for point in track_set:
+                if point[0] < margin:
+                    point[0] = margin
+                elif point[0] > (WIDTH - margin):
+                    point[0] = WIDTH - margin
+
+                # if point[1] < 0: # not used for the moment as I rescale the Z axis when I save it
+                #     point[1] = 0
+                # elif point[1] > DEPTH:
+                #     point[1] = DEPTH
+
+                if point[-1] < margin:
+                    point[-1] = margin
+                elif point[-1] > HEIGHT - margin:
+                    point[-1] = HEIGHT - margin
+                    
+                pt_set.append(point)
+            return pt_set
+
         track_set = [[0,0,0] for i in range(len(track_points)*2)] 
         for i in range(len(track_points)):
             displacement = math.pow(rn.random(), difficulty) * max_displacement
@@ -100,42 +122,49 @@ class TrackGenerator():
             track_set[i*2] = track_points[i]
             track_set[i*2 + 1][0] = (track_points[i][0] + track_points[(i+1)%len(track_points)][0]) / 2 + disp[0]
             track_set[i*2 + 1][-1] = (track_points[i][-1] + track_points[(i+1)%len(track_points)][-1]) / 2 + disp[1]
-        for i in range(3):
+
+        previous = np.array(track_set)
+        momentum = 10
+        prev_diff = [1]*momentum
+        max_it = 100
+        it = 0 
+        while(np.average(np.array(prev_diff)[-momentum:])>0.0 and it<max_it): # not really elegant but works
             track_set = self.fix_angles(track_set)
             track_set = self.push_points_apart(track_set)
-        # push any point outside screen limits back again
-        final_set = []
-        for point in track_set:
-            if point[0] < margin:
-                point[0] = margin
-            elif point[0] > (WIDTH - margin):
-                point[0] = WIDTH - margin
-            if point[-1] < margin:
-                point[-1] = margin
-            elif point[-1] > HEIGHT - margin:
-                point[-1] = HEIGHT - margin
-            final_set.append(point)
+            track_set = get_into_bounds(track_set)
+
+            prev_diff.append(process_diff(track_set, previous))
+
+            previous = np.array(track_set)
+            it += 1
+
+        final_set = get_into_bounds(track_set)
         return final_set
 
     def push_points_apart(self, points, distance=DISTANCE_BETWEEN_POINTS):
-        # distance might need some tweaking
-        distance2 = distance * distance 
         for i in range(len(points)):
             for j in range(i+1, len(points)):
                 p_distance =  math.sqrt((points[i][0]-points[j][0])**2 + (points[i][-1]-points[j][-1])**2)
+                dx, dz, dy = [0]*3
                 if p_distance < distance:
                     dx = points[j][0] - points[i][0]  
-                    dy = points[j][-1] - points[i][-1]  
-                    dl = math.sqrt(dx*dx + dy*dy)  
+                    dz = points[j][1] - points[i][1]
+                    dy = points[j][-1] - points[i][-1]
+                    dl = math.sqrt(dx**2 + dy**2 + dz**2)  
                     dx /= dl
+                    dz /= dl
                     dy /= dl
                     dif = distance - dl
                     dx *= dif
+                    dz *= dif
                     dy *= dif
-                    points[j][0] = points[j][0] + dx 
-                    points[j][-1] = points[j][-1] + dy 
-                    points[i][0] = points[i][0] - dx 
-                    points[i][-1] = points[i][-1] - dy 
+                    points[j][0] = points[j][0] + dx
+                    points[j][1] = points[j][1] + dz/2
+                    points[j][-1] = points[j][-1] + dy
+                    points[i][0] = points[i][0] - dx
+                    points[i][1] = points[i][1] - dz/2
+                    points[i][-1] = points[i][-1] - dy
+                
         return points
 
     def fix_angles(self, points, max_angle=MAX_ANGLE):
@@ -146,25 +175,32 @@ class TrackGenerator():
                 prev_point = len(points)-1
             next_point = (i+1) % len(points)
             px = points[i][0] - points[prev_point][0]
+            pz = points[i][1] - points[prev_point][1]
             py = points[i][-1] - points[prev_point][-1]
-            pl = math.sqrt(px*px + py*py)
+            pl = math.sqrt(px*px + py*py + pz*pz)
             px /= pl
             py /= pl
             nx = -(points[i][0] - points[next_point][0])
+            nz = -(points[i][1] - points[next_point][1])
             ny = -(points[i][-1] - points[next_point][-1])
-            nl = math.sqrt(nx*nx + ny*ny)
+            nl = math.sqrt(nx*nx + ny*ny + nz*nz)
             nx /= nl
-            ny /= nl  
+            ny /= nl
+
             a = math.atan2(px * ny - py * nx, px * nx + py * ny)
             if (abs(math.degrees(a)) <= max_angle):
                 continue
             diff = math.radians(max_angle * math.copysign(1,a)) - a
             c = math.cos(diff)
             s = math.sin(diff)
+
+                
             new_x = (nx * c - ny * s) * nl
             new_y = (nx * s + ny * c) * nl
             points[next_point][0] = points[i][0] + new_x
             points[next_point][-1] = points[i][-1] + new_y
+            points[i][1] = (points[prev_point][1]+points[i][1]+points[next_point][1])/3
+
         return points
 
     def smooth_track(self, track_points):
@@ -179,7 +215,7 @@ class TrackGenerator():
         y = np.r_[y, y[0]]
 
         # fit splines to x=f(u) and y=g(u), treating both as periodic.
-        tck, u = interpolate.splprep([x, z, y], s=3, per=True)
+        tck, u = interpolate.splprep([x, z, y], s=0, per=True)
 
         # evaluate the spline fits for # points evenly spaced distance values
         xi, zi, yi = interpolate.splev(np.linspace(0, 1, SPLINE_POINTS), tck)
@@ -188,16 +224,23 @@ class TrackGenerator():
     def make_z(self, points):
         return
 
-    def modify_track(self, points):
-        screen = np.zeros((HEIGHT, WIDTH, 1))
-        points = np.array(points, dtype=np.int32)
-        to_draw = np.array([(i[0], i[-1]) for i in points])
-        to_draw = to_draw.reshape((-1,1,2))
-        cv2.polylines(screen, [to_draw], True, 1, thickness=2)
+    def modify_track(self):
+        def rescale_Z(points, max_d=DEPTH):
+            points = np.array(points)
+            z_axis = points[:, 1]
+            z_axis = z_axis-np.min(z_axis)
+            points[:, 1] = z_axis/np.max(z_axis)*max_d
+            return points
+
+        screen = np.zeros((HEIGHT, WIDTH, 3))
+        self._track_points = rescale_Z(self._track_points)
+        for i, point in enumerate(self._track_points):
+            cv2.circle(screen, (int(point[0]), int(point[-1])), 8, (1, point[1]/DEPTH, 0))
+
         cv2.imshow("track", screen)
         key = chr(cv2.waitKey(0))
         
-        if key == "a": # saving process
+        if key == "a": # saving/modify process
             to_save_points, start_index = self.select_start_point(self._track_points)
             to_save_points = self.rotate_circuit(to_save_points, start_index)
             to_save_points = self.vertical_flip_points(to_save_points)
@@ -220,6 +263,12 @@ class TrackGenerator():
             if pt[1] < 0:
                 pt[1] = 0
 
+        if pts[1][-1] < 0.0: # check if the circuit is in the wrong "way"
+            pts[:, 0] = -pts[:, 0] # flip x
+            pts[:, -1] = -pts[:, -1] # flip y
+
+
+
         circuit_coords = open(save_file, 'w')
         for pt in pts:
             circuit_coords.write(str(pt[0]+x_offset)+','+str(pt[1]+y_offset)+','+str(pt[-1]+z_offset)+'\n')
@@ -231,9 +280,8 @@ class TrackGenerator():
 
         while(key != "a"):
             screen = np.zeros((HEIGHT, WIDTH, 3))
-            d_max = max(np.array(points)[:, 1])
             for i, point in enumerate(points):
-                cv2.circle(screen, (int(point[0]), int(point[-1])), 8, (1, point[1]/d_max, 0))
+                cv2.circle(screen, (int(point[0]), int(point[-1])), 8, (1, point[1]/DEPTH, 0))
 
             cv2.circle(screen, (int(points[start_index][0]), int(points[start_index][-1])), 20, (1, 1, 1))
 
@@ -274,9 +322,8 @@ class TrackGenerator():
         new_points = points
         while(key != "a"):
             screen = np.zeros((HEIGHT, WIDTH, 3))
-            d_max = max(np.array(points)[:, 1])
             for i, point in enumerate(new_points):
-                cv2.circle(screen, (int(point[0]), int(point[-1])), 8, (1, point[1]/d_max, 0))
+                cv2.circle(screen, (int(point[0]), int(point[-1])), 8, (1, point[1]/DEPTH, 0))
 
             st = new_points[0]
             cv2.line(screen, (int(st[0]-10), int(st[-1])), (int(st[0]+10), int(st[-1])), (1,1,1), thickness=2)
@@ -302,8 +349,7 @@ class TrackGenerator():
 if __name__ == "__main__":
     t = TrackGenerator()
     while(1):
-        # try:
-        #     t.generate_track()
-        # except:
-        #     print("unable to create track")
-        t.generate_track()
+        try:
+            t.generate_track()
+        except:
+            print("unable to create track")

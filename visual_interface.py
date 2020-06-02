@@ -39,7 +39,7 @@ class AutoInterface(): # single interface object for 1 client
         last_button += 1
         Button(self.window, text="Reset to default", command=self.reset).grid(row=off_y, column=last_button)
         last_button += 1
-        Button(self.window, text="init car", command=self.client_class.rdm_color_start).grid(row=off_y, column=last_button)
+        Button(self.window, text="init car", command=self.client_class.rdm_color_startv2).grid(row=off_y, column=last_button)
         last_button += 1
 
 
