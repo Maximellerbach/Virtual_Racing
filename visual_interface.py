@@ -14,7 +14,7 @@ class windowInterface(Tk): # screen to display interface for ALL client
         self.off_y += space
 
 class AutoInterface(): # single interface object for 1 client
-    def __init__(self, window, client_class, screen_size=(512, 512), name="Auto_0", record_button=False):
+    def __init__(self, window, client_class, screen_size=(512, 512), name="Auto_0"):
         self.window = window
         self.client_class = client_class
 
@@ -28,10 +28,10 @@ class AutoInterface(): # single interface object for 1 client
         self.values = [] # list of values of scales in interface
         self.bool_checkbox = [] # list of checkbox objects in interface
 
-        self.add_interface(record_button)
+        self.add_interface()
 
 
-    def add_interface(self, record_button, scale_labels=["steer_threshold", "max_speed", "turn_speed", "max_throttle", "min_throttle", "sq", "mult", "brake_factor", "brake_threshold", "fake_delay"], from_to=[(0.2, 0), (1, 30), (1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 1), (0, 1), (0, 500)]):
+    def add_interface(self, scale_labels=["max_speed", "max_throttle", "min_throttle", "sq", "mult", "fake_delay"], from_to=[(1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 500)]):
         off_y = self.window.off_y
         last_button = 0 
 
@@ -68,12 +68,11 @@ class AutoInterface(): # single interface object for 1 client
         self.bool_checkbox.append(bvar)
         
 
-        if record_button:
-            self.record_bool = BooleanVar()
-            b = Checkbutton(self.window, text="Record", variable=self.record_bool, onvalue=True, offvalue=False, command=self.get_record)
-            b.grid(row=off_y, column=last_button)
-            last_button += 1
-    
+        self.record_bool = BooleanVar()
+        b = Checkbutton(self.window, text="Record", variable=self.record_bool, onvalue=True, offvalue=False, command=self.get_record)
+        b.grid(row=off_y, column=last_button)
+        last_button += 1
+
         for it, label, scale_range in zip(range(len(scale_labels)), scale_labels, from_to):
             value = DoubleVar() # dummy value
             s = Scale(self.window, resolution=0.05, variable=value, command=self.get_slider_value, label=label, length=75, width=15, from_=scale_range[0], to=scale_range[1])
