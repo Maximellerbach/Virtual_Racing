@@ -1,7 +1,5 @@
 import base64
 import json
-import os
-import random
 import threading
 import time
 from io import BytesIO
@@ -9,32 +7,25 @@ from io import BytesIO
 import cv2
 import keyboard
 import numpy as np
-import tensorflow as tf
-from keras.backend.tensorflow_backend import set_session
-from keras.models import load_model
+import tensorflow
+from tensorflow.keras.models import load_model
 from PIL import Image
+from customDataset import DatasetJson, direction_component, speed_component, throttle_component, time_component
 
 from gym_donkeycar.core.sim_client import SDClient
-from utils import cat2linear, st2cat, smoothing_st, transform_st, opt_acc, add_softmax, add_random
+from utils import cat2linear, transform_st, opt_acc, add_random
 from visual_interface import windowInterface, AutoInterface
 
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True # dynamically grow the memory used on the GPU
-sess = tf.Session(config=config)
-config.log_device_placement = True  # to log device placement (on which device the operation ran)
-set_session(sess) # set this TensorFlow session as the default
 
+physical_devices = tensorflow.config.list_physical_devices('GPU')
+for gpu_instance in physical_devices:
+    tensorflow.config.experimental.set_memory_growth(gpu_instance, True)
 
-# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID" # force tensorflow/keras to use the cpu instead of gpu (already used by the game)
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-
-###########################################
 
 class SimpleClient(SDClient):
-    def __init__(self, address, model, Dataset, sleep_time=0.01, PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, name='0', use_speed=(False, False)):
+    def __init__(self, address, model, dataset, name='0',
+                 PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, use_speed=(False, False), sleep_time=0.01):
         super().__init__(*address, poll_socket_sleep_time=sleep_time)
-        self.Dataset = Dataset
         self.last_image = np.zeros((120, 160, 3))
         self.car_loaded = False
         self.to_process = False
@@ -49,8 +40,11 @@ class SimpleClient(SDClient):
 
         self.name = str(name)
         self.model = model
+        self.dataset = dataset
+        self.show_img = True
         self.PID_settings = PID_settings
         self.buffer_time = buffer_time
+        self.default_dos = f'C:\\Users\\maxim\\recorded_imgs\\{self.name}_{time.time()}\\'
 
     def on_msg_recv(self, json_packet):
         try:
@@ -67,11 +61,14 @@ class SimpleClient(SDClient):
 
             elif msg_type == "telemetry":
                 imgString = json_packet["image"]
-                tmp_img = np.asarray(Image.open(BytesIO(base64.b64decode(imgString))))
+                tmp_img = np.asarray(Image.open(
+                    BytesIO(base64.b64decode(imgString))))
                 tmp_img = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
                 self.delay_buffer(tmp_img)
-                cv2.imshow('img_'+self.name, tmp_img)
-                cv2.waitKey(1)
+
+                if self.show_img:
+                    cv2.imshow('img_'+self.name, tmp_img)
+                    cv2.waitKey(1)
 
                 self.to_process = True
                 self.current_speed = json_packet["speed"]
@@ -84,8 +81,8 @@ class SimpleClient(SDClient):
             pass
 
     def reset_car(self):
-        msg = '{ "msg_type" : "reset_car" }'
-        self.send(msg)
+        msg = {"msg_type": "reset_car"}
+        self.send_now(json.dumps(msg))
 
     def delay_buffer(self, img):
         now = time.time()
@@ -105,8 +102,8 @@ class SimpleClient(SDClient):
                 del to_remove[0]
 
     def load_map(self, track):
-        msg = '{ "msg_type" : "load_scene", "scene_name" : "'+track+'" }'
-        self.send_now(msg)
+        msg = {"msg_type": "load_scene", "scene_name": track}
+        self.send_now(json.dumps(msg))
 
     def startv2(self, name='Maxime', cam_msg='', color=[20, 20, 20]):
         '''
@@ -125,14 +122,20 @@ class SimpleClient(SDClient):
                'country': country}
         self.send_now(json.dumps(msg))
         print("sended racer info")
+        time.sleep(0.1)
 
         # Car config
-        msg = f'"msg_type": "car_config", "body_style": "donkey", "body_r": "{color[0]}", "body_g": "{color[1]}", "body_b": "{color[2]}", "car_name": "{car_name}", "font_size": "100"'
+        msg = '{ "msg_type" : "car_config", "body_style" : "donkey", "body_r": "'+str(color[0])+'", "body_g": "'+str(
+            color[1])+'", "body_b": "'+str(color[2])+'", "car_name": "'+str(car_name)+'", "font_size": "100"}'
         self.send_now(msg)
         print("sended body info")
+        time.sleep(0.1)
+
+        # msg = '{ "msg_type" : "cam_config", "fov" : "0", "fish_eye_x" : "0", "fish_eye_y" : "0", "img_w" : "0", "img_h" : "0", "img_d" : "0", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "3.0", "offset_z" : "0.0", "rot_x" : "90.0" }'
+        # self.send_now(msg)
 
         # this sleep gives the car time to spawn. Once it's spawned, it's ready for the camera config.
-        time.sleep(0.1)
+        # time.sleep(0.1)
 
     def send_controls(self, steering, throttle, brake):
         p = {"msg_type": "control",
@@ -140,8 +143,7 @@ class SimpleClient(SDClient):
              "throttle": throttle.__str__(),
              "brake": brake.__str__()}
 
-        msg = json.dumps(p)
-        self.send(msg)
+        self.send(json.dumps(p))
 
         # this sleep lets the SDClient thread poll our message and send it out.
         time.sleep(self.poll_socket_sleep_sec)
@@ -155,23 +157,24 @@ class SimpleClient(SDClient):
         img = cv2.resize(img, (160, 120))
         return img
 
-    def predict_st(self, cat2st=True, transform=True, smooth=True, record=False, coef=[-1, -0.5, 0, 0.5, 1]):
+    def predict_st(self, cat2st=False, transform=True, smooth=True, record=False, coef=[-1, -0.5, 0, 0.5, 1]):
         if self.to_process is False:
             return False
 
-        img = self.last_image
         target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
 
-        img = self.prepare_img(img)
+        img = self.prepare_img(self.last_image)
         pred_img = np.expand_dims(img, axis=0)/255
 
         if self.use_speed[0]:
-            ny = self.model.predict([pred_img, np.expand_dims(self.current_speed, axis=0)])
+            ny = self.model.predict(
+                [pred_img, np.expand_dims(self.current_speed, axis=0)])
         else:
             ny = self.model.predict(pred_img)
 
         if cat2st:
             st = cat2linear(ny, coef=coef)
+
         elif self.use_speed[1]:
             st = ny[0][0][0]
         else:
@@ -183,19 +186,19 @@ class SimpleClient(SDClient):
                 optimal_acc = max_throttle
 
         else:
-            optimal_acc = opt_acc(st, self.current_speed, max_throttle, min_throttle, target_speed)
+            optimal_acc = opt_acc(st, self.current_speed,
+                                  max_throttle, min_throttle, target_speed)
 
         if transform:
             st = transform_st(st, sq, mult)
 
-        self.update(st, throttle=optimal_acc, brake=0)
+        if record:
+            self.save_img(img, direction=st, speed=self.current_speed,
+                          throttle=optimal_acc, time=time.time())
 
+        self.update(st, throttle=optimal_acc, brake=0)
         self.to_process = False
         self.previous_st = st
-
-        if record:
-            pass
-
         return st
 
     def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"]):
@@ -238,43 +241,47 @@ class SimpleClient(SDClient):
             color = np.random.randint(0, 255, size=(3))
         self.startv2(color=color)
 
-    def save_img(self, img, annotations={'direction': 0, 'speed': None, 'throttle': None}):
-        # TODO: finish this function
-        tmp_img = img[self.crop:]
-        tmp_img = cv2.resize(tmp_img, (160, 120))
+    def save_img(self, img, direction=0, speed=None, throttle=None, time=None):
+        tmp_img = self.prepare_img(img)
 
-        direction = annotations['direction']
-        speed = annotations['speed']
-        throttle = annotations['throttle']
+        to_save = {}
+        if direction is not None:
+            to_save['direction'] = direction
+        if speed is not None:
+            to_save['speed'] = speed
+        if throttle is not None:
+            to_save['throttle'] = throttle
+        if time is not None:
+            to_save['time'] = time
 
-        to_save_annotations = [direction]
-
-        # self.Dataset.save
+        self.dataset.save_img_and_annotations(
+            self.default_dos, tmp_img, to_save)
 
 
 class universal_client(SimpleClient):
-    def __init__(self, params_dict):
+    def __init__(self, params_dict, load_map):
         host = params_dict['host']
         port = params_dict['port']
         window = params_dict['window']
         use_speed = params_dict['use_speed']
         sleep_time = params_dict['sleep_time']
         PID_settings = params_dict['PID_settings']
+        self.loop_settings = params_dict['loop_settings']
+        self.record = params_dict['record']
         buffer_time = params_dict['buffer_time']
         name = params_dict['name']
-        load_map = params_dict['load_map']
         track = params_dict['track']
         model = params_dict['model']
-        self.save_path = params_dict['save_path']
+        dataset = params_dict['dataset']
 
-        super().__init__((host, port), model, sleep_time=sleep_time, name=name,
+        super().__init__((host, port), model, dataset, sleep_time=sleep_time, name=name,
                          PID_settings=PID_settings, buffer_time=buffer_time, use_speed=use_speed)
         self.model._make_predict_function()
+        if load_map:
+            self.load_map(track)
 
-        self.loop_settings = [True, False, False, False]
-        self.record = False
-
-        self.t = threading.Thread(target=self.loop())
+        self.t = threading.Thread(target=self.loop)
+        self.t.start()
 
         AutoInterface(window, self)
 
@@ -293,12 +300,14 @@ class universal_client(SimpleClient):
                 if self.use_speed[1]:
                     manual, throttle = self.get_throttle()
                     if manual is False:
-                        throttle = opt_acc(manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
+                        throttle = opt_acc(
+                            manual_st, self.current_speed, max_throttle, min_throttle, target_speed)
                 else:
                     throttle = None
 
                 if self.record and self.to_process:
-                    self.save_img(self.last_image, manual_st, self.save_path, speed=self.current_speed, throttle=throttle)
+                    self.save_img(self.last_image, direction=manual_st, speed=self.current_speed,
+                                  throttle=throttle, time=time.time())
                     self.to_process = False
 
                 if do_overide:
@@ -307,13 +316,12 @@ class universal_client(SimpleClient):
                     self.update(manual_st, throttle=throttle*bk)
 
                 else:
-                    self.predict_st(transform=transform, smooth=smooth, random=random)
-                
+                    self.predict_st(transform=transform, smooth=smooth)
 
             else:
-                self.predict_st(transform=transform, smooth=smooth, random=random)
-            
-            if self.aborted == True:
+                self.predict_st(transform=transform, smooth=smooth)
+
+            if self.aborted:
                 msg = '{ "msg_type" : "exit_scene" }'
                 self.send(msg)
                 time.sleep(1.0)
@@ -323,61 +331,38 @@ class universal_client(SimpleClient):
                 break
 
 
-def select_mode(mode_index):
-    obj_list = [auto_client, universal_client, manual_client]
-    return obj_list[mode_index]
-
-
 if __name__ == "__main__":
-    # os.system("C:\\Users\\maxim\\GITHUB\\Virtual_Racing\\DonkeySimWin\\donkey_sime.exe") #start sim doesn't work for the moment
-    model = load_model('C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv5_latency.h5', compile=False)
+    model = load_model(
+        'C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv5_latency.h5', compile=False)
+    dataset = DatasetJson(
+        [direction_component, speed_component, throttle_component, time_component])
 
-    # with CustomObjectScope({'GlorotUniform': glorot_uniform()}):
-    #     model = load_model('lane_keeper.h5')
-    # model.summary()
-
-    paths = "C:\\Users\\maxim\\recorded_imgs\\1_"+self.name+"_"+str(time.time())+"\\" # for the moment stays here, no need to specify the save path
-
-    config = 1
-
-    if config == 0:
-        host = "trainmydonkey.com"
-        sleep_time = 0.01
-        target_speed = 17
-        max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.45
-        sq = 1.0 # modify steering by : st ** sq # can correct some label smoothing effects
-        mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
-        fake_delay = 0.0
-
-    elif config == 1:
-        host = "127.0.0.1"
-        sleep_time = 0.01
-        target_speed = 17
-        max_throttle = 1.0 # if you set max_throttle=min_throttle then throttle will be cte
-        min_throttle = 0.45
-        sq = 1.0 # modify steering by : st ** sq # can correct some label smoothing effects
-        mult = 1.0 # modify steering by: st * mult (act kind as a sensivity setting)
-        fake_delay = 0.16
-
-
-    clients_modes = [1] # clients to spawn : 0= auto; 1= semi-auto; 2= manual
-    interval= 1.0
+    remote = True
+    host = 'trainmydonkey.com' if remote else '127.0.0.1'
     port = 9091
-    v1 = True
 
-    settings = [target_speed, max_throttle, min_throttle, sq, mult] # can be changed in graphic interface
-    window = windowInterface() # create window
+    window = windowInterface()  # create window
+    sleep_time = 0.01
+
+    config = {
+        'host': host,
+        'port': port,
+        'window': window,
+        'use_speed': (True, True),
+        'sleep_time': sleep_time,
+        'PID_settings': [17, 1.0, 0.45, 1.0, 1.0],
+        'buffer_time': 0.0,
+        'track': 'mountain_track',
+        'name': '0',
+        'model': model,
+        'dataset': dataset
+    }
 
     load_map = True
-    for i in range(len(clients_modes)):
-
-        ### THREAD VERSION ### 
-        client = select_mode(clients_modes[i])
-        client(window, model, host=host, port=port, cat2st=False, track='mountain_track', sleep_time=sleep_time, PID_settings=settings, name=str(i), thread=True, use_speed=(True, True), buffer_time=fake_delay, load_map=load_map, v1=v1)
+    client_number = 1
+    for i in range(client_number):
+        universal_client(config, load_map)
         print("started client", i)
-
-        # time.sleep(interval) # wait a bit to add an other client
         load_map = False
 
-    window.mainloop() # only display when everything is loaded to avoid threads to be blocked !
+    window.mainloop()  # only display when everything is loaded to avoid threads to be blocked !

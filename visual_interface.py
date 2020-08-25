@@ -103,11 +103,11 @@ class AutoInterface(): # single interface object for 1 client
     def get_record(self, v=0):
         self.client_class.record = self.record_bool.get()
         
-        if not os.path.exists(self.client_class.save_path) and self.client_class.record == True: # create the dir in order to be able to save img
-            os.makedirs(self.client_class.save_path)
+        if not os.path.exists(self.client_class.default_dos) and self.client_class.record: # create the dir in order to be able to save img
+            os.makedirs(self.client_class.default_dos)
 
-        if os.path.exists(self.client_class.save_path) and self.client_class.record == False and len(glob(self.client_class.save_path+"*"))==0: # delete the dir if no items are inside
-            os.rmdir(self.client_class.save_path)
+        if os.path.exists(self.client_class.default_dos) and self.client_class.record == False and len(glob(self.client_class.default_dos+"*"))==0: # delete the dir if no items are inside
+            os.rmdir(self.client_class.default_dos)
 
     def set_slider_value(self):
         assert len(self.scale_default) == len(self.scales_value)
