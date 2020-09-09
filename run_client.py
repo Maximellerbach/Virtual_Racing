@@ -10,7 +10,7 @@ import numpy as np
 import tensorflow
 from tensorflow.keras.models import load_model
 from PIL import Image
-from customDataset import DatasetJson, direction_component, speed_component, throttle_component, time_component
+from custom_modules.datasets import dataset_json
 
 from gym_donkeycar.core.sim_client import SDClient
 from utils import cat2linear, transform_st, opt_acc, add_random
@@ -50,10 +50,7 @@ class SimpleClient(SDClient):
         try:
             msg_type = json_packet['msg_type']
 
-            if msg_type == "need_car_config":
-                self.rdm_color_startv2()
-
-            elif msg_type == "car_loaded":
+            if msg_type == "car_loaded":
                 self.car_loaded = True
 
             elif msg_type == "aborted":
@@ -102,40 +99,49 @@ class SimpleClient(SDClient):
                 del to_remove[0]
 
     def load_map(self, track):
-        msg = {"msg_type": "load_scene", "scene_name": track}
-        self.send_now(json.dumps(msg))
-
-    def startv2(self, name='Maxime', cam_msg='', color=[20, 20, 20]):
-        '''
-        send three config messages to setup car, racer, and camera
-        '''
-        racer_name = "Maxime Ellerbach"
-        car_name = name+'_'+self.name
-        bio = "I race robots."
-        country = "France"
-
-        # Racer info
-        msg = {'msg_type': 'racer_info',
-               'racer_name': racer_name,
-               'car_name': car_name,
-               'bio': bio,
-               'country': country}
-        self.send_now(json.dumps(msg))
-        print("sended racer info")
-        time.sleep(0.1)
-
-        # Car config
-        msg = '{ "msg_type" : "car_config", "body_style" : "donkey", "body_r": "'+str(color[0])+'", "body_g": "'+str(
-            color[1])+'", "body_b": "'+str(color[2])+'", "car_name": "'+str(car_name)+'", "font_size": "100"}'
+        msg = '{ "msg_type" : "load_scene", "scene_name" : "'+track+'" }'
         self.send_now(msg)
-        print("sended body info")
-        time.sleep(0.1)
 
-        # msg = '{ "msg_type" : "cam_config", "fov" : "0", "fish_eye_x" : "0", "fish_eye_y" : "0", "img_w" : "0", "img_h" : "0", "img_d" : "0", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "3.0", "offset_z" : "0.0", "rot_x" : "90.0" }'
-        # self.send_now(msg)
+    def start(self, load_map=True, track='generated_track', custom_body=True, body_msg='', custom_cam=False, cam_msg='', color=[20, 20, 20]):
+        if load_map:  # load a specific map
+            self.load_map(track)
+            while(not self.car_loaded):
+                time.sleep(1.0)
 
-        # this sleep gives the car time to spawn. Once it's spawned, it's ready for the camera config.
-        # time.sleep(0.1)
+        if custom_body:  # send custom body info
+            if body_msg == '':
+                msg = {
+                    "msg_type": "car_config",
+                    "body_style": "car02",
+                    "body_r": str(color[0]),
+                    "body_g": str(color[1]),
+                    "body_b": str(color[2]),
+                    "car_name": f'Maxime_{self.name}',
+                    "font_size": "50"}
+            else:
+                msg = body_msg
+            self.send(json.dumps(msg))
+            time.sleep(1.0)
+
+        if custom_cam:  # send custom cam info
+            if cam_msg == '':
+                msg = {
+                    "msg_type": "cam_config",
+                    "fov": "0",
+                    "fish_eye_x": "0.0",
+                    "fish_eye_y": "0.0",
+                    "img_w": "255",
+                    "img_h": "255",
+                    "img_d": "3",
+                    "img_enc": "JPG",
+                    "offset_x": "0.0",
+                    "offset_y": "1.7", "offset_z":
+                    "1.0", "rot_x": "40.0"
+                }
+            else:
+                msg = cam_msg
+            self.send(json.dumps(msg))
+            time.sleep(1.0)
 
     def send_controls(self, steering, throttle, brake):
         p = {"msg_type": "control",
@@ -236,10 +242,10 @@ class SimpleClient(SDClient):
 
         return manual, keys_th
 
-    def rdm_color_startv2(self, color=[]):
+    def rdm_color_start(self, color=[]):
         if color == []:
             color = np.random.randint(0, 255, size=(3))
-        self.startv2(color=color)
+        self.start(color=color)
 
     def save_img(self, img, direction=0, speed=None, throttle=None, time=None):
         tmp_img = self.prepare_img(img)
@@ -276,9 +282,11 @@ class universal_client(SimpleClient):
 
         super().__init__((host, port), model, dataset, sleep_time=sleep_time, name=name,
                          PID_settings=PID_settings, buffer_time=buffer_time, use_speed=use_speed)
-        self.model._make_predict_function()
-        if load_map:
-            self.load_map(track)
+        # self.model._make_predict_function()
+
+        # if load_map:
+        #     self.load_map(track)
+        self.rdm_color_start()
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -333,11 +341,11 @@ class universal_client(SimpleClient):
 
 if __name__ == "__main__":
     model = load_model(
-        'C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\convolution\\linearv5_latency.h5', compile=False)
-    dataset = DatasetJson(
-        [direction_component, speed_component, throttle_component, time_component])
+        'C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\models\\linearv4_latency.h5', compile=False)
+    dataset = dataset_json.Dataset(
+        ['direction', 'speed', 'throttle', 'time'])
 
-    remote = True
+    remote = False
     host = 'trainmydonkey.com' if remote else '127.0.0.1'
     port = 9091
 
@@ -355,11 +363,13 @@ if __name__ == "__main__":
         'track': 'mountain_track',
         'name': '0',
         'model': model,
-        'dataset': dataset
+        'dataset': dataset,
+        'record': True,
+        'loop_settings': [False, False, False, False]
     }
 
     load_map = True
-    client_number = 1
+    client_number = 2
     for i in range(client_number):
         universal_client(config, load_map)
         print("started client", i)
