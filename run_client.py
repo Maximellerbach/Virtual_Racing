@@ -74,7 +74,8 @@ class SimpleClient(SDClient):
                 # print(json_packet)
 
         except:
-            print(json_packet)
+            if json_packet != {}:
+                print(json_packet)
             pass
 
     def reset_car(self):
@@ -102,12 +103,7 @@ class SimpleClient(SDClient):
         msg = '{ "msg_type" : "load_scene", "scene_name" : "'+track+'" }'
         self.send_now(msg)
 
-    def start(self, load_map=True, track='generated_track', custom_body=True, body_msg='', custom_cam=False, cam_msg='', color=[20, 20, 20]):
-        if load_map:  # load a specific map
-            self.load_map(track)
-            while(not self.car_loaded):
-                time.sleep(1.0)
-
+    def startv1(self, custom_body=True, body_msg='', custom_cam=False, cam_msg='', color=[20, 20, 20]):
         if custom_body:  # send custom body info
             if body_msg == '':
                 msg = {
@@ -142,6 +138,39 @@ class SimpleClient(SDClient):
                 msg = cam_msg
             self.send(json.dumps(msg))
             time.sleep(1.0)
+
+    def startv2(self, name='Maxime', cam_msg='', color=[20, 20, 20]):
+        '''
+        send three config messages to setup car, racer, and camera
+        '''
+        racer_name = "Maxime Ellerbach"
+        car_name = name+'_'+self.name
+        bio = "I race robots."  # TODO
+        country = "France"
+
+        # Racer info
+        msg = {'msg_type': 'racer_info',
+               'racer_name': racer_name,
+               'car_name': car_name,
+               'bio': bio,
+               'country': country}
+        self.send_now(json.dumps(msg))
+        print("sended racer info")
+
+        # Car config
+        msg = '{ "msg_type" : "car_config", "body_style" : "donkey", "body_r" : "'+str(color[0])+'", "body_g" : "'+str(
+            color[1])+'", "body_b" : "'+str(color[2])+'", "car_name" : "%s", "font_size" : "100" }' % (car_name)
+        self.send_now(msg)
+        print("sended body info")
+
+        # this sleep gives the car time to spawn. Once it's spawned, it's ready for the camera config.
+        time.sleep(0.1)
+
+        # using default cam
+        # msg = '{ "msg_type" : "cam_config", "fov" : "70", "fish_eye_x" : "0.0", "fish_eye_y" : "0.0", "img_w" : "255", "img_h" : "255", "img_d" : "3", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "1.7", "offset_z" : "1.0", "rot_x" : "40.0" }'
+        # msg = '{ "msg_type" : "cam_config", "fov" : "150", "fish_eye_x" : "1.0", "fish_eye_y" : "1.0", "img_w" : "255", "img_h" : "255", "img_d" : "1", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "3.0", "offset_z" : "0.0", "rot_x" : "90.0" }'
+        # self.send_now(msg)
+        # print("sended cam info")
 
     def send_controls(self, steering, throttle, brake):
         p = {"msg_type": "control",
@@ -242,10 +271,15 @@ class SimpleClient(SDClient):
 
         return manual, keys_th
 
-    def rdm_color_start(self, color=[]):
+    def rdm_color_startv1(self, color=[]):
         if color == []:
             color = np.random.randint(0, 255, size=(3))
-        self.start(color=color)
+        self.startv1(color=color)
+
+    def rdm_color_startv2(self, color=[]):
+        if color == []:
+            color = np.random.randint(0, 255, size=(3))
+        self.startv2(color=color)
 
     def save_img(self, img, direction=0, speed=None, throttle=None, time=None):
         tmp_img = self.prepare_img(img)
@@ -260,7 +294,7 @@ class SimpleClient(SDClient):
         if time is not None:
             to_save['time'] = time
 
-        self.dataset.save_img_and_annotations(
+        self.dataset.save_img_and_annotation(
             self.default_dos, tmp_img, to_save)
 
 
@@ -282,11 +316,12 @@ class universal_client(SimpleClient):
 
         super().__init__((host, port), model, dataset, sleep_time=sleep_time, name=name,
                          PID_settings=PID_settings, buffer_time=buffer_time, use_speed=use_speed)
-        # self.model._make_predict_function()
+        # self.model._make_predict_function() # useless with tf2
+        
+        if load_map:
+            self.load_map(track)
 
-        # if load_map:
-        #     self.load_map(track)
-        self.rdm_color_start()
+        self.rdm_color_startv1()
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -360,7 +395,7 @@ if __name__ == "__main__":
         'sleep_time': sleep_time,
         'PID_settings': [17, 1.0, 0.45, 1.0, 1.0],
         'buffer_time': 0.0,
-        'track': 'mountain_track',
+        'track': 'warehouse',
         'name': '0',
         'model': model,
         'dataset': dataset,

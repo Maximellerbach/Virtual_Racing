@@ -43,7 +43,7 @@ class AutoInterface():  # single interface object for 1 client
         tkinter.Button(self.window, text="Reset to default",
                        command=self.reset).grid(row=off_y, column=last_button)
         last_button += 1
-        tkinter.Button(self.window, text="init car", command=self.client_class.rdm_color_start).grid(
+        tkinter.Button(self.window, text="init car", command=self.client_class.rdm_color_startv1).grid(
             row=off_y, column=last_button)
         last_button += 1
 
