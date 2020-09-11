@@ -71,7 +71,8 @@ class SimpleClient(SDClient):
                 self.current_speed = json_packet["speed"]
 
                 del json_packet["image"]
-                # print(json_packet)
+                self.last_packet = json_packet
+                # print(self.last_packet)
 
         except:
             if json_packet != {}:
@@ -236,7 +237,7 @@ class SimpleClient(SDClient):
         self.previous_st = st
         return st
 
-    def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"]):
+    def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"], debug=True):
         pressed = []
         bpressed = []
         dpressed = []
@@ -255,7 +256,6 @@ class SimpleClient(SDClient):
         if any(pressed+bpressed) and not any(dpressed):
             manual = True
 
-        # print(keys_st, pressed)
         return manual, keys_st, bfactor
 
     def get_throttle(self, keys=["c", "d", "e"], bkeys=["down"]):
@@ -295,7 +295,7 @@ class SimpleClient(SDClient):
             to_save['time'] = time
 
         self.dataset.save_img_and_annotation(
-            self.default_dos, tmp_img, to_save)
+            tmp_img, to_save, dos=self.default_dos)
 
 
 class universal_client(SimpleClient):
@@ -317,7 +317,7 @@ class universal_client(SimpleClient):
         super().__init__((host, port), model, dataset, sleep_time=sleep_time, name=name,
                          PID_settings=PID_settings, buffer_time=buffer_time, use_speed=use_speed)
         # self.model._make_predict_function() # useless with tf2
-        
+
         if load_map:
             self.load_map(track)
 
@@ -374,6 +374,47 @@ class universal_client(SimpleClient):
                 break
 
 
+class log_points(SimpleClient):
+    def __init__(self, host='127.0.0.1', port=9091, filename='log_points'):
+        self.filename = filename
+        self.out_file = open(self.filename, "w")
+        self.out_file.close()
+        self.last_point = (0, 0, 0)
+        self.time_interval = 1
+        self.last_time = time.time()
+
+        super().__init__((host, port), 0, 0)
+
+        self.rdm_color_startv1()
+        self.t = threading.Thread(target=self.loop)
+        self.t.start()
+
+    def log(self, px, py, pz):
+        # not really efficient way to do this, but it works
+        if abs(time.time()-self.last_time) >= self.time_interval:
+            self.out_file = open(self.filename, "a")
+            self.out_file.write(f'{px},{py},{pz}\n')
+            self.out_file.close()
+            self.last_time = time.time()
+
+    def loop(self):
+        self.update(0, throttle=0.0, brake=0.1)
+        while(True):
+            toogle_manual, manual_st, bk = self.get_keyboard()
+
+            if toogle_manual:
+                manual, throttle = self.get_throttle()
+                self.update(manual_st, throttle=0.2*bk)
+
+            px = self.last_packet.get('pos_x')
+            py = self.last_packet.get('pos_y')
+            pz = self.last_packet.get('pos_z')
+
+            if (px, py, pz) != self.last_point:
+                self.log(px, py, pz)
+            self.last_point = (px, py, pz)
+
+
 if __name__ == "__main__":
     model = load_model(
         'C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\models\\linearv4_latency.h5', compile=False)
@@ -399,14 +440,15 @@ if __name__ == "__main__":
         'name': '0',
         'model': model,
         'dataset': dataset,
-        'record': True,
-        'loop_settings': [False, False, False, False]
+        'record': False,
+        'loop_settings': [False, False, True, False]
     }
 
     load_map = True
-    client_number = 2
+    client_number = 1
     for i in range(client_number):
-        universal_client(config, load_map)
+        # universal_client(config, load_map)
+        log_points()
         print("started client", i)
         load_map = False
 
