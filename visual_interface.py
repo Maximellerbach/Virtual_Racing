@@ -80,6 +80,7 @@ class AutoInterface():  # single interface object for 1 client
                                 onvalue=True, offvalue=False, command=self.get_record)
         b.grid(row=off_y, column=last_button)
         last_button += 1
+        self.bool_checkbox.append(bvar)
 
         for it, label, scale_range in zip(range(len(scale_labels)), scale_labels, from_to):
             value = tkinter.DoubleVar()  # dummy value

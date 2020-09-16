@@ -1,6 +1,6 @@
 import numpy as np
-from keras.models import Model, Input
-from keras.layers import Activation
+
+# TODO: function to calculate optimal st with current speed (not needed for the moment)
 
 
 def transform_st(st, sq, mult):
@@ -65,15 +65,3 @@ def cat2linear(cat, coef=[-1, -0.5, 0, 0.5, 1], av=False):
 # maps every -1; 1 value to rounded direction value : [3, 5, 7, 9, 11]
 def st2cat(st):
     return int(round(st*2)*2+7)
-
-
-def add_softmax(model, shape=(120, 160, 3)):  # TODO
-    inp = Input(shape)
-
-    x = model(inp)
-    y = Activation('softmax')(x)
-
-    new_model = Model(inp, y)
-    return new_model
-
-# TODO: function to calculate optimal st with current speed (not needed for the moment)
