@@ -41,7 +41,7 @@ class SimpleClient(SDClient):
         self.output_names = model_utils.get_model_output_names(model)
 
         self.default_dos = f'C:\\Users\\maxim\\recorded_imgs\\{self.name}_{time.time()}\\'
-        os.mkdir(self.default_dos)
+        # os.mkdir(self.default_dos)
 
         # declare some variables
         self.last_image = np.zeros((120, 160, 3))
@@ -72,9 +72,9 @@ class SimpleClient(SDClient):
                 tmp_img = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
                 self.delay_buffer(tmp_img)
 
-                if self.show_img:
-                    cv2.imshow('img_'+self.name, tmp_img)
-                    cv2.waitKey(1)
+                # if self.show_img:
+                #     cv2.imshow('img_'+self.name, tmp_img)
+                #     cv2.waitKey(1)
 
                 self.to_process = True
                 self.current_speed = json_packet["speed"]
@@ -208,12 +208,11 @@ class SimpleClient(SDClient):
         self.send_controls(st, throttle, brake)
 
     def prepare_img(self, img):
-        # shouldn't be necessary but may be usefull in the future
         img = img[self.crop:, :, :]
         img = cv2.resize(img, (160, 120))
         return img
 
-    def predict_st(self, transform=True, smooth=True, record=False, coef=[-1, -0.5, 0, 0.5, 1]):
+    def predict_st(self, transform=True, smooth=True, coef=[-1, -0.5, 0, 0.5, 1]):
         if self.to_process is False:
             return False
 
@@ -235,15 +234,11 @@ class SimpleClient(SDClient):
             throttle = opt_acc(direction, self.current_speed,
                                max_throttle, min_throttle, target_speed)
         else:
-            throttle = max_throttle if throttle > max_throttle else throttle
-            throttle = min_throttle if throttle < min_throttle else throttle
+            throttle = 1 if throttle > 1 else throttle
+            throttle = 0 if throttle < 0 else throttle
 
         if transform:
             direction = transform_st(direction, sq, mult)
-
-        if record:
-            self.save_img(img, direction=direction, speed=self.current_speed,
-                          throttle=throttle, time=time.time())
 
         self.update(direction, throttle=throttle, brake=0)
         self.to_process = False
@@ -345,6 +340,7 @@ class universal_client(SimpleClient):
         while(True):
             target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
             transform, smooth, random, do_overide, record = self.loop_settings
+            # print(transform, smooth, random, do_overide, record)
 
             toogle_manual, manual_st, bk = self.get_keyboard()
 
@@ -430,7 +426,7 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = load_model(
-        'C:\\Users\\maxim\\github\\AutonomousCar\\test_model\\models\\rd_sim.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rd_sim.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     dataset = dataset_json.Dataset(
         ['direction', 'speed', 'throttle', 'time'])
