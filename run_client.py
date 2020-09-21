@@ -25,7 +25,7 @@ for gpu_instance in physical_devices:
 
 class SimpleClient(SDClient):
     def __init__(self, address, model, dataset, input_components, name='0',
-                 PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, sleep_time=0.01, show_img=False):
+                 PID_settings=(0.5, 0.5, 1, 1), buffer_time=0.1, sleep_time=0.01):
 
         super().__init__(*address, poll_socket_sleep_time=sleep_time)
         self.model = model
@@ -36,7 +36,6 @@ class SimpleClient(SDClient):
         self.PID_settings = PID_settings
         self.buffer_time = buffer_time
 
-        self.show_img = True
         self.input_names = dataset.indexes2components_names(input_components)
         self.output_names = model_utils.get_model_output_names(model)
 
@@ -44,10 +43,10 @@ class SimpleClient(SDClient):
         # os.mkdir(self.default_dos)
 
         # declare some variables
-        self.last_image = np.zeros((120, 160, 3))
         self.car_loaded = False
-        self.to_process = False
         self.aborted = False
+        self.iter_image = np.zeros((120, 160, 3))
+        self.to_process = []
         self.crop = 40
         self.previous_st = 0
         self.current_speed = 0
@@ -71,12 +70,6 @@ class SimpleClient(SDClient):
                     BytesIO(base64.b64decode(imgString))))
                 tmp_img = cv2.cvtColor(tmp_img, cv2.COLOR_RGB2BGR)
                 self.delay_buffer(tmp_img)
-
-                # if self.show_img:
-                #     cv2.imshow('img_'+self.name, tmp_img)
-                #     cv2.waitKey(1)
-
-                self.to_process = True
                 self.current_speed = json_packet["speed"]
 
                 del json_packet["image"]
@@ -104,7 +97,7 @@ class SimpleClient(SDClient):
             else:
                 break
         if len(to_remove) > 0:
-            self.last_image = temp_img
+            self.to_process.append(temp_img)
             for _ in range(len(to_remove)):
                 del self.img_buffer[0]
                 del to_remove[0]
@@ -212,13 +205,10 @@ class SimpleClient(SDClient):
         img = cv2.resize(img, (160, 120))
         return img
 
-    def predict_st(self, transform=True, smooth=True, coef=[-1, -0.5, 0, 0.5, 1]):
-        if self.to_process is False:
-            return False
-
+    def predict_st(self, img, transform=True, smooth=True, coef=[-1, -0.5, 0, 0.5, 1]):
         target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
 
-        img = self.prepare_img(self.last_image)
+        img = self.prepare_img(img)
         to_pred = [np.expand_dims(img, axis=0)/255]
 
         if 'speed' in self.input_names:
@@ -228,7 +218,7 @@ class SimpleClient(SDClient):
 
         direction = pred.get('direction', None)
         throttle = pred.get('throttle', None)
-        assert direction is not None
+        # assert direction is not None
 
         if throttle is None:
             throttle = opt_acc(direction, self.current_speed,
@@ -241,7 +231,6 @@ class SimpleClient(SDClient):
             direction = transform_st(direction, sq, mult)
 
         self.update(direction, throttle=throttle, brake=0)
-        self.to_process = False
         self.previous_st = direction
 
     def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"], debug=True):
@@ -288,21 +277,17 @@ class SimpleClient(SDClient):
             color = np.random.randint(0, 255, size=(3))
         self.startv2(color=color)
 
-    def save_img(self, img, direction=0, speed=None, throttle=None, time=None):
+    def save_img(self, img, **to_save):
+        print("SAVING")
         tmp_img = self.prepare_img(img)
-
-        to_save = {}
-        if direction is not None:
-            to_save['direction'] = direction
-        if speed is not None:
-            to_save['speed'] = speed
-        if throttle is not None:
-            to_save['throttle'] = throttle
-        if time is not None:
-            to_save['time'] = time
-
         self.dataset.save_img_and_annotation(
             tmp_img, to_save, dos=self.default_dos)
+
+    def get_latest(self):
+        if len(self.to_process) > 0:
+            return self.to_process[-1]
+        else:
+            return self.iter_image
 
 
 class universal_client(SimpleClient):
@@ -328,6 +313,7 @@ class universal_client(SimpleClient):
             self.load_map(track)
 
         self.rdm_color_startv1()
+        self.rdm_color_startv1() # have no idea why but first init doesn't work as expected while second works fine 
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -335,12 +321,21 @@ class universal_client(SimpleClient):
         AutoInterface(window, self)
 
     def loop(self):
-        # TODO: refactor this function
+        self.predict_st(self.get_latest())  # do an init pred
         self.update(0, throttle=0.0, brake=0.1)
+
         while(True):
             target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
-            transform, smooth, random, do_overide, record = self.loop_settings
+            transform, smooth, random, do_overide, record, stop = self.loop_settings
             # print(transform, smooth, random, do_overide, record)
+
+            if stop:
+                self.update(0, throttle=0.0, brake=1.0)
+                continue
+
+            if len(self.to_process) > 0:
+                self.iter_image = self.to_process[-1]
+                self.to_process = []
 
             toogle_manual, manual_st, bk = self.get_keyboard()
 
@@ -349,7 +344,6 @@ class universal_client(SimpleClient):
                     manual_st = transform_st(manual_st, sq, mult)
 
                 manual, throttle = self.get_throttle()
-                throttle = throttle*bk
                 if manual is False:
                     throttle = opt_acc(
                         manual_st,
@@ -359,19 +353,15 @@ class universal_client(SimpleClient):
                         target_speed
                     )
 
-                if record and self.to_process:
-                    self.save_img(self.last_image, direction=manual_st, speed=self.current_speed,
-                                  throttle=throttle, time=time.time())
-                    self.to_process = False
+                if record:  # TODO fix record images -> move self.to_process to dict
+                    self.save_img(self.get_latest(), direction=manual_st, speed=self.current_speed,
+                                  throttle=throttle*bk, time=time.time())
 
                 if do_overide:
-                    self.update(manual_st, throttle=throttle)
+                    self.update(manual_st, throttle=throttle*bk)
+                    continue
 
-                else:
-                    self.predict_st(transform=transform, smooth=smooth)
-
-            else:
-                self.predict_st(transform=transform, smooth=smooth)
+            self.predict_st(self.get_latest(), transform=transform, smooth=smooth)
 
             if self.aborted:
                 msg = '{ "msg_type" : "exit_scene" }'
@@ -425,15 +415,15 @@ class log_points(SimpleClient):
 
 
 if __name__ == "__main__":
-    model = load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rd_sim.h5', compile=False)
+    model = model_utils.safe_load_model(
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim2.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     dataset = dataset_json.Dataset(
         ['direction', 'speed', 'throttle', 'time'])
     input_components = [1]
 
     remote = False
-    host = 'trainmydonkey.com' if remote else '127.0.0.1'
+    host = 'donkey-sim.roboticist.dev' if remote else '127.0.0.1'
     port = 9091
 
     window = windowInterface()  # create a window
@@ -445,7 +435,7 @@ if __name__ == "__main__":
         'use_speed': (True, True),
         'sleep_time': 0.01,
         'PID_settings': [17, 1.0, 0.45, 1.0, 1.0],
-        'loop_settings': [False, False, False, False, False],
+        'loop_settings': [False, False, False, True, False, True],
         'buffer_time': 0.0,
         'track': 'roboracingleague_1',
         'name': '0',
