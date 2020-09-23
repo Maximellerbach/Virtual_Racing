@@ -40,13 +40,13 @@ class SimpleClient(SDClient):
         self.output_names = model_utils.get_model_output_names(model)
 
         self.default_dos = f'C:\\Users\\maxim\\recorded_imgs\\{self.name}_{time.time()}\\'
-        # os.mkdir(self.default_dos)
 
         # declare some variables
         self.car_loaded = False
         self.aborted = False
         self.iter_image = np.zeros((120, 160, 3))
-        self.to_process = []
+        self.last_time = time.time()
+        self.to_process = {self.last_time: self.iter_image}
         self.crop = 40
         self.previous_st = 0
         self.current_speed = 0
@@ -93,14 +93,21 @@ class SimpleClient(SDClient):
         for it, imgt in enumerate(self.img_buffer):
             if now-imgt[1] > self.buffer_time:
                 temp_img = imgt[0]
+                temp_time = imgt[1]
                 to_remove.append(it)
             else:
                 break
         if len(to_remove) > 0:
-            self.to_process.append(temp_img)
+            self.to_process[temp_time] = temp_img
             for _ in range(len(to_remove)):
                 del self.img_buffer[0]
                 del to_remove[0]
+
+    def terminate(self):
+        if os.path.exists(self.default_dos):
+            if len(os.listdir(self.default_dos)) == 0:
+                os.rmdir(self.default_dos)
+        self.aborted = True
 
     def load_map(self, track):
         msg = '{ "msg_type" : "load_scene", "scene_name" : "'+track+'" }'
@@ -278,16 +285,21 @@ class SimpleClient(SDClient):
         self.startv2(color=color)
 
     def save_img(self, img, **to_save):
-        print("SAVING")
+        # print("SAVING")
         tmp_img = self.prepare_img(img)
         self.dataset.save_img_and_annotation(
             tmp_img, to_save, dos=self.default_dos)
 
     def get_latest(self):
         if len(self.to_process) > 0:
-            return self.to_process[-1]
+            return list(self.to_process.items())[-1]
         else:
-            return self.iter_image
+            return self.last_time, self.iter_image
+
+    def wait_latest(self):
+        while(len(self.to_process) == 0):
+            time.sleep(self.poll_socket_sleep_sec)
+        return list(self.to_process.items())[-1]
 
 
 class universal_client(SimpleClient):
@@ -313,7 +325,8 @@ class universal_client(SimpleClient):
             self.load_map(track)
 
         self.rdm_color_startv1()
-        self.rdm_color_startv1() # have no idea why but first init doesn't work as expected while second works fine 
+        # have no idea why but first init doesn't work as expected while second works fine
+        self.rdm_color_startv1()
 
         self.t = threading.Thread(target=self.loop)
         self.t.start()
@@ -321,7 +334,8 @@ class universal_client(SimpleClient):
         AutoInterface(window, self)
 
     def loop(self):
-        self.predict_st(self.get_latest())  # do an init pred
+        _, img = self.get_latest()
+        self.predict_st(img)  # do an init pred
         self.update(0, throttle=0.0, brake=0.1)
 
         while(True):
@@ -331,11 +345,13 @@ class universal_client(SimpleClient):
 
             if stop:
                 self.update(0, throttle=0.0, brake=1.0)
+                time.sleep(self.poll_socket_sleep_sec)
                 continue
 
             if len(self.to_process) > 0:
-                self.iter_image = self.to_process[-1]
-                self.to_process = []
+                self.last_time, self.iter_image = self.get_latest()
+            else:
+                self.last_time, self.iter_image = self.wait_latest()
 
             toogle_manual, manual_st, bk = self.get_keyboard()
 
@@ -353,15 +369,23 @@ class universal_client(SimpleClient):
                         target_speed
                     )
 
-                if record:  # TODO fix record images -> move self.to_process to dict
-                    self.save_img(self.get_latest(), direction=manual_st, speed=self.current_speed,
+                if record and len(self.to_process) > 0:
+                    self.save_img(self.iter_image, direction=manual_st, speed=self.current_speed,
                                   throttle=throttle*bk, time=time.time())
 
                 if do_overide:
                     self.update(manual_st, throttle=throttle*bk)
-                    continue
 
-            self.predict_st(self.get_latest(), transform=transform, smooth=smooth)
+            else:
+                self.predict_st(self.iter_image,
+                                transform=transform, smooth=smooth)
+
+            # clean up the dict before the next iteration
+            # del self.to_process[self.last_time]
+            img_times = list(self.to_process.keys())
+            for img_time in img_times:
+                if img_time <= self.last_time:
+                    del self.to_process[img_time]
 
             if self.aborted:
                 msg = '{ "msg_type" : "exit_scene" }'
@@ -416,7 +440,7 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = model_utils.safe_load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim2.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim4.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     dataset = dataset_json.Dataset(
         ['direction', 'speed', 'throttle', 'time'])
@@ -435,8 +459,8 @@ if __name__ == "__main__":
         'use_speed': (True, True),
         'sleep_time': 0.01,
         'PID_settings': [17, 1.0, 0.45, 1.0, 1.0],
-        'loop_settings': [False, False, False, True, False, True],
-        'buffer_time': 0.0,
+        'loop_settings': [True, False, False, True, False, True],
+        'buffer_time': 50,
         'track': 'roboracingleague_1',
         'name': '0',
         'model': model,

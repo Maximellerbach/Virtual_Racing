@@ -25,7 +25,7 @@ class AutoInterface():  # single interface object for 1 client
 
         self.scales_value = []  # list of scales objects in interface
         self.scale_default = self.client_class.PID_settings + \
-            [self.client_class.buffer_time*1000]
+            [self.client_class.buffer_time]
         self.box_default = self.client_class.loop_settings
 
         self.values = []  # list of values of scales in interface
@@ -40,8 +40,11 @@ class AutoInterface():  # single interface object for 1 client
         tkinter.Button(self.window, text="Respawn", command=self.respawn).grid(
             row=off_y, column=last_button)
         last_button += 1
-        tkinter.Button(self.window, text="Reset to default",
-                       command=self.reset).grid(row=off_y, column=last_button)
+        tkinter.Button(self.window, text="Terminate", command=self.client_class.terminate).grid(
+            row=off_y, column=last_button)
+        last_button += 1
+        tkinter.Button(self.window, text="Reset to default", command=self.reset).grid(
+            row=off_y, column=last_button)
         last_button += 1
         tkinter.Button(self.window, text="init car", command=self.client_class.rdm_color_startv1).grid(
             row=off_y, column=last_button)
@@ -119,6 +122,7 @@ class AutoInterface():  # single interface object for 1 client
         self.client_class.loop_settings = bools
 
     def get_record(self, v=0):
+        self.get_checkbox_value()
         self.client_class.record = self.record_bool.get()
 
         # create the dir in order to be able to save img
