@@ -303,7 +303,7 @@ class SimpleClient(SDClient):
 
 
 class universal_client(SimpleClient):
-    def __init__(self, params_dict, load_map):
+    def __init__(self, params_dict, load_map, name):
         host = params_dict.get('host', '127.0.0.1')
         port = params_dict.get('port', '9091')
         window = params_dict['window']
@@ -311,7 +311,6 @@ class universal_client(SimpleClient):
         PID_settings = params_dict['PID_settings']
         self.loop_settings = params_dict['loop_settings']
         buffer_time = params_dict['buffer_time']
-        name = params_dict['name']
         track = params_dict['track']
         model = params_dict['model']
         dataset = params_dict['dataset']
@@ -339,62 +338,68 @@ class universal_client(SimpleClient):
         self.update(0, throttle=0.0, brake=0.1)
 
         while(True):
-            target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
-            transform, smooth, random, do_overide, record, stop = self.loop_settings
-            # print(transform, smooth, random, do_overide, record)
+            try:
+                target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
+                transform, smooth, random, do_overide, record, stop = self.loop_settings
+                # print(transform, smooth, random, do_overide, record)
 
-            if stop:
-                self.update(0, throttle=0.0, brake=1.0)
-                time.sleep(self.poll_socket_sleep_sec)
-                continue
+                if len(self.to_process) > 0:
+                    self.last_time, self.iter_image = self.get_latest()
+                else:
+                    self.last_time, self.iter_image = self.wait_latest()
 
-            if len(self.to_process) > 0:
-                self.last_time, self.iter_image = self.get_latest()
-            else:
-                self.last_time, self.iter_image = self.wait_latest()
+                cv2.imshow(self.name, self.iter_image)
+                cv2.waitKey(1)
 
-            toogle_manual, manual_st, bk = self.get_keyboard()
+                if self.aborted:
+                    msg = '{ "msg_type" : "exit_scene" }'
+                    self.send(msg)
+                    time.sleep(1.0)
 
-            if toogle_manual:
-                if transform:
-                    manual_st = transform_st(manual_st, sq, mult)
+                    self.stop()
+                    print("stopped client", self.name)
+                    break
 
-                manual, throttle = self.get_throttle()
-                if manual is False:
-                    throttle = opt_acc(
-                        manual_st,
-                        self.current_speed,
-                        max_throttle,
-                        min_throttle,
-                        target_speed
-                    )
+                if stop:
+                    self.update(0, throttle=0.0, brake=1.0)
+                    time.sleep(self.poll_socket_sleep_sec)
+                    continue
 
-                if record and len(self.to_process) > 0:
-                    self.save_img(self.iter_image, direction=manual_st, speed=self.current_speed,
-                                  throttle=throttle*bk, time=time.time())
+                toogle_manual, manual_st, bk = self.get_keyboard()
 
-                if do_overide:
-                    self.update(manual_st, throttle=throttle*bk)
+                if toogle_manual:
+                    if transform:
+                        manual_st = transform_st(manual_st, sq, mult)
 
-            else:
-                self.predict_st(self.iter_image,
-                                transform=transform, smooth=smooth)
+                    manual, throttle = self.get_throttle()
+                    if manual is False:
+                        throttle = opt_acc(
+                            manual_st,
+                            self.current_speed,
+                            max_throttle,
+                            min_throttle,
+                            target_speed
+                        )
 
-            # clean up the dict before the next iteration
-            # del self.to_process[self.last_time]
-            img_times = list(self.to_process.keys())
-            for img_time in img_times:
-                if img_time <= self.last_time:
-                    del self.to_process[img_time]
+                    if record and len(self.to_process) > 0:
+                        self.save_img(self.iter_image, direction=manual_st, speed=self.current_speed,
+                                    throttle=throttle*bk, time=time.time())
 
-            if self.aborted:
-                msg = '{ "msg_type" : "exit_scene" }'
-                self.send(msg)
-                time.sleep(1.0)
+                    if do_overide:
+                        self.update(manual_st, throttle=throttle*bk)
 
-                self.stop()
-                print("stopped client", self.name)
-                break
+                else:
+                    self.predict_st(self.iter_image,
+                                    transform=transform, smooth=smooth)
+
+                # clean up the dict before the next iteration
+                # del self.to_process[self.last_time]
+                img_times = list(self.to_process.keys())
+                for img_time in img_times:
+                    if img_time <= self.last_time:
+                        del self.to_process[img_time]
+            except:
+                print(f'{self.name}: loop failed to process iteration')
 
 
 class log_points(SimpleClient):
@@ -440,14 +445,16 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = model_utils.safe_load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim4.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\gentrck_sim1_working.h5', compile=False)
     model_utils.apply_predict_decorator(model)
+    # model.summary()
+
     dataset = dataset_json.Dataset(
         ['direction', 'speed', 'throttle', 'time'])
     input_components = [1]
 
-    remote = False
-    host = 'donkey-sim.roboticist.dev' if remote else '127.0.0.1'
+    hosts = ['127.0.0.1', 'donkey-sim.roboticist.dev', '34.91.232.96']
+    host = hosts[1]
     port = 9091
 
     window = windowInterface()  # create a window
@@ -459,9 +466,9 @@ if __name__ == "__main__":
         'use_speed': (True, True),
         'sleep_time': 0.01,
         'PID_settings': [17, 1.0, 0.45, 1.0, 1.0],
-        'loop_settings': [True, False, False, True, False, True],
-        'buffer_time': 50,
-        'track': 'roboracingleague_1',
+        'loop_settings': [True, False, False, False, False, True],
+        'buffer_time': 0.0,
+        'track': 'generated_track',
         'name': '0',
         'model': model,
         'dataset': dataset,
@@ -471,7 +478,7 @@ if __name__ == "__main__":
     load_map = True
     client_number = 1
     for i in range(client_number):
-        universal_client(config, load_map)
+        universal_client(config, load_map, str(i))
         # log_points()
         print("started client", i)
         load_map = False
