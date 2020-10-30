@@ -367,7 +367,7 @@ class universal_client(SimpleClient):
 
                 toogle_manual, manual_st, bk = self.get_keyboard()
 
-                if toogle_manual:
+                if toogle_manual and do_overide:
                     if transform:
                         manual_st = transform_st(manual_st, sq, mult)
 
@@ -382,13 +382,18 @@ class universal_client(SimpleClient):
                         )
 
                     if record and len(self.to_process) > 0:
-                        self.save_img(self.iter_image, direction=manual_st, speed=self.current_speed,
-                                    throttle=throttle*bk, time=time.time())
+                        self.save_img(self.iter_image, direction=manual_st,
+                                      speed=self.current_speed, throttle=throttle*bk, time=time.time())
 
-                    if do_overide:
-                        self.update(manual_st, throttle=throttle*bk)
+                    self.update(manual_st, throttle=throttle*bk)
 
                 else:
+                    # print(len(self.to_process))
+                    if len(self.to_process) > 0:
+                        self.last_time, self.iter_image = self.get_latest()
+                    else:
+                        self.last_time, self.iter_image = self.wait_latest()
+
                     self.predict_st(self.iter_image,
                                     transform=transform, smooth=smooth)
 
@@ -447,14 +452,14 @@ if __name__ == "__main__":
     model = model_utils.safe_load_model(
         'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\gentrck_sim1_working.h5', compile=False)
     model_utils.apply_predict_decorator(model)
-    # model.summary()
+    model.summary()
 
     dataset = dataset_json.Dataset(
         ['direction', 'speed', 'throttle', 'time'])
     input_components = [1]
 
-    hosts = ['127.0.0.1', 'donkey-sim.roboticist.dev', '34.91.232.96']
-    host = hosts[1]
+    hosts = ['127.0.0.1', 'donkey-sim.roboticist.dev', 'sim.diyrobocars.fr']
+    host = hosts[0]
     port = 9091
 
     window = windowInterface()  # create a window
@@ -465,10 +470,10 @@ if __name__ == "__main__":
         'window': window,
         'use_speed': (True, True),
         'sleep_time': 0.01,
-        'PID_settings': [17, 1.0, 0.45, 1.0, 1.0],
+        'PID_settings': [17, 1.0, 0.45, 1.15, 1.0],
         'loop_settings': [True, False, False, False, False, True],
-        'buffer_time': 0.0,
-        'track': 'generated_track',
+        'buffer_time': 0,
+        'track': 'roboracingleague_1',
         'name': '0',
         'model': model,
         'dataset': dataset,

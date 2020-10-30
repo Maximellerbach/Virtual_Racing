@@ -1,10 +1,9 @@
 import os
 from glob import glob
-from tkinter import *
 import tkinter
 
 
-class windowInterface(Tk):  # screen to display interface for ALL client
+class windowInterface(tkinter.Tk):  # screen to display interface for ALL client
     def __init__(self, name="basic interface"):
         super().__init__(name)
         self.n_client = 0
@@ -33,9 +32,11 @@ class AutoInterface():  # single interface object for 1 client
 
         self.add_interface()
 
-    def add_interface(self, scale_labels=["max_speed", "max_throttle", "min_throttle", "sq", "mult", "fake_delay"], from_to=[(1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 500)]):
+    def add_interface(self):
         off_y = self.window.off_y
         last_button = 0
+        scale_labels = ["max_speed", "max_throttle", "min_throttle", "sq", "mult", "fake_delay"]
+        from_to = [(1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 500)]
 
         tkinter.Button(self.window, text="Respawn", command=self.respawn).grid(
             row=off_y, column=last_button)
@@ -151,16 +152,3 @@ class AutoInterface():  # single interface object for 1 client
 
         self.get_slider_value()
         self.get_checkbox_value()
-
-
-if __name__ == "__main__":
-    from run_client import manual_client
-
-    window = windowInterface()
-
-    client = manual_client(window, "", "")
-    auto = AutoInterface(window, client)
-    client2 = manual_client(window, "", "")
-    auto2 = AutoInterface(window, client2)
-
-    window.mainloop()  # display only at the end your window
