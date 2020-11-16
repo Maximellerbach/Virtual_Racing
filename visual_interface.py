@@ -36,7 +36,7 @@ class AutoInterface():  # single interface object for 1 client
         off_y = self.window.off_y
         last_button = 0
         scale_labels = ["max_speed", "max_throttle", "min_throttle", "sq", "mult", "fake_delay"]
-        from_to = [(1, 30), (0, 1), (0, 1), (0.5, 1.5), (0.5, 2), (0, 500)]
+        from_to = [(1, 30), (0, 1), (0, 1), (0.5, 1.5), (0, 2), (0, 500)]
 
         tkinter.Button(self.window, text="Respawn", command=self.respawn).grid(
             row=off_y, column=last_button)

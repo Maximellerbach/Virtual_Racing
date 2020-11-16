@@ -36,8 +36,11 @@ class SimpleClient(SDClient):
         self.PID_settings = PID_settings
         self.buffer_time = buffer_time
 
-        self.input_names = dataset.indexes2components_names(input_components)
-        self.output_names = model_utils.get_model_output_names(model)
+        try:
+            self.input_names = dataset.indexes2components_names(input_components)
+            self.output_names = model_utils.get_model_output_names(model)
+        except:
+            pass
 
         self.default_dos = f'C:\\Users\\maxim\\recorded_imgs\\{self.name}_{time.time()}\\'
 
@@ -122,7 +125,7 @@ class SimpleClient(SDClient):
                     "body_r": str(color[0]),
                     "body_g": str(color[1]),
                     "body_b": str(color[2]),
-                    "car_name": f'Maxime_{self.name}',
+                    "car_name": f'Car_{self.name}',
                     "font_size": "50"}
             else:
                 msg = body_msg
@@ -240,7 +243,7 @@ class SimpleClient(SDClient):
         self.update(direction, throttle=throttle, brake=0)
         self.previous_st = direction
 
-    def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"], debug=True):
+    def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"]):
         pressed = []
         bpressed = []
         dpressed = []
@@ -352,10 +355,6 @@ class universal_client(SimpleClient):
                 cv2.waitKey(1)
 
                 if self.aborted:
-                    msg = '{ "msg_type" : "exit_scene" }'
-                    self.send(msg)
-                    time.sleep(1.0)
-
                     self.stop()
                     print("stopped client", self.name)
                     break
@@ -416,7 +415,7 @@ class log_points(SimpleClient):
         self.time_interval = 1
         self.last_time = time.time()
 
-        super().__init__((host, port), 0, 0)
+        super().__init__((host, port), 0, 0, 0)
 
         self.rdm_color_startv1()
         self.t = threading.Thread(target=self.loop)
@@ -450,7 +449,7 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = model_utils.safe_load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\gentrck_sim1_working.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim7_working.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     model.summary()
 
@@ -470,18 +469,17 @@ if __name__ == "__main__":
         'window': window,
         'use_speed': (True, True),
         'sleep_time': 0.01,
-        'PID_settings': [17, 1.0, 0.45, 1.15, 1.0],
+        'PID_settings': [17, 1.0, 0.45, 1.35, 1.0],
         'loop_settings': [True, False, False, False, False, True],
         'buffer_time': 0,
-        'track': 'roboracingleague_1',
-        'name': '0',
+        'track': 'generated_track',
         'model': model,
         'dataset': dataset,
         'input_components': input_components
     }
 
     load_map = True
-    client_number = 1
+    client_number = 3
     for i in range(client_number):
         universal_client(config, load_map, str(i))
         # log_points()
