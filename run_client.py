@@ -37,7 +37,8 @@ class SimpleClient(SDClient):
         self.buffer_time = buffer_time
 
         try:
-            self.input_names = dataset.indexes2components_names(input_components)
+            self.input_names = dataset.indexes2components_names(
+                input_components)
             self.output_names = model_utils.get_model_output_names(model)
         except:
             pass
@@ -121,11 +122,11 @@ class SimpleClient(SDClient):
             if body_msg == '':
                 msg = {
                     "msg_type": "car_config",
-                    "body_style": "car02",
+                    "body_style": "cybertruck",
                     "body_r": str(color[0]),
                     "body_g": str(color[1]),
                     "body_b": str(color[2]),
-                    "car_name": f'Car_{self.name}',
+                    "car_name": f'Maxime_{self.name}',
                     "font_size": "50"}
             else:
                 msg = body_msg
@@ -137,16 +138,17 @@ class SimpleClient(SDClient):
             if cam_msg == '':
                 msg = {
                     "msg_type": "cam_config",
-                    "fov": "0",
-                    "fish_eye_x": "0.0",
-                    "fish_eye_y": "0.0",
-                    "img_w": "255",
-                    "img_h": "255",
+                    "fov": "90",
+                    "fish_eye_x": "0.4",
+                    "fish_eye_y": "0.7",
+                    "img_w": "160",
+                    "img_h": "120",
                     "img_d": "3",
                     "img_enc": "JPG",
                     "offset_x": "0.0",
-                    "offset_y": "1.7", "offset_z":
-                    "1.0", "rot_x": "40.0"
+                    "offset_y": "1.120395",
+                    "offset_z": "0.5528488",
+                    "rot_x": "15.0"
                 }
             else:
                 msg = cam_msg
@@ -173,12 +175,9 @@ class SimpleClient(SDClient):
         print("sended racer info")
 
         # Car config
-        msg = '{ "msg_type" : "car_config", "body_style" : "donkey", "body_r" : "'+str(color[0])+'", "body_g" : "'+str(
-            color[1])+'", "body_b" : "'+str(color[2])+'", "car_name" : "%s", "font_size" : "100" }' % (car_name)
-
         msg = {
             "msg_type": "car_config",
-            "body_style": "car02",
+            "body_style": "f1",
             "body_r": str(color[0]),
             "body_g": str(color[1]),
             "body_b": str(color[2]),
@@ -191,17 +190,15 @@ class SimpleClient(SDClient):
         time.sleep(0.1)
 
         # using default cam
-        # msg = '{ "msg_type" : "cam_config", "fov" : "70", "fish_eye_x" : "0.0", "fish_eye_y" : "0.0", "img_w" : "255", "img_h" : "255", "img_d" : "3", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "1.7", "offset_z" : "1.0", "rot_x" : "40.0" }'
-        # msg = '{ "msg_type" : "cam_config", "fov" : "150", "fish_eye_x" : "1.0", "fish_eye_y" : "1.0", "img_w" : "255", "img_h" : "255", "img_d" : "1", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "3.0", "offset_z" : "0.0", "rot_x" : "90.0" }'
-        # self.send_now(msg)
-        # print("sended cam info")
+        msg = '{ "msg_type" : "cam_config", "fov" : "90", "fish_eye_x" : "0.4", "fish_eye_y" : "0.0", "img_w" : "160", "img_h" : "120", "img_d" : "3", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "1.120395", "offset_z" : "0.5528488", "rot_x" : "15.0" }'
+        self.send_now(msg)
+        print("sended cam info")
 
     def send_controls(self, steering, throttle, brake):
         p = {"msg_type": "control",
              "steering": steering.__str__(),
              "throttle": throttle.__str__(),
              "brake": brake.__str__()}
-
         self.send(json.dumps(p))
 
         # this sleep lets the SDClient thread poll our message and send it out.
@@ -219,15 +216,14 @@ class SimpleClient(SDClient):
         target_speed, max_throttle, min_throttle, sq, mult = self.PID_settings
 
         img = self.prepare_img(img)
-        to_pred = [np.expand_dims(img, axis=0)/255]
+        # to_pred = [np.expand_dims(img, axis=0)/255]
 
-        if 'speed' in self.input_names:
-            to_pred.append(np.expand_dims(self.current_speed, axis=0))
+        to_pred = self.dataset.make_to_pred_annotations([img], [[0, self.current_speed]], input_components)
         pred, dt = self.model.predict(to_pred)
         pred = pred[0]
 
-        direction = pred.get('direction', None)
-        throttle = pred.get('throttle', None)
+        direction = pred.get('direction', None)[0]
+        throttle = pred.get('throttle', None)[0]
         # assert direction is not None
 
         if throttle is None:
@@ -240,7 +236,7 @@ class SimpleClient(SDClient):
         if transform:
             direction = transform_st(direction, sq, mult)
 
-        self.update(direction, throttle=throttle, brake=0)
+        self.update(direction, throttle=throttle*0.85, brake=0)
         self.previous_st = direction
 
     def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"]):
@@ -402,8 +398,10 @@ class universal_client(SimpleClient):
                 for img_time in img_times:
                     if img_time <= self.last_time:
                         del self.to_process[img_time]
-            except:
+
+            except Exception as e:
                 print(f'{self.name}: loop failed to process iteration')
+                print(e)
 
 
 class log_points(SimpleClient):
@@ -449,7 +447,7 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = model_utils.safe_load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim7_working.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim7.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     model.summary()
 
@@ -458,7 +456,7 @@ if __name__ == "__main__":
     input_components = [1]
 
     hosts = ['127.0.0.1', 'donkey-sim.roboticist.dev', 'sim.diyrobocars.fr']
-    host = hosts[0]
+    host = hosts[-1]
     port = 9091
 
     window = windowInterface()  # create a window
@@ -469,17 +467,17 @@ if __name__ == "__main__":
         'window': window,
         'use_speed': (True, True),
         'sleep_time': 0.01,
-        'PID_settings': [17, 1.0, 0.45, 1.35, 1.0],
+        'PID_settings': [17, 1.0, 0.45, 1.3, 1.1],
         'loop_settings': [True, False, False, False, False, True],
-        'buffer_time': 0,
-        'track': 'generated_track',
+        'buffer_time': 11,
+        'track': 'roboracingleague_1',
         'model': model,
         'dataset': dataset,
         'input_components': input_components
     }
 
     load_map = True
-    client_number = 3
+    client_number = 1
     for i in range(client_number):
         universal_client(config, load_map, str(i))
         # log_points()

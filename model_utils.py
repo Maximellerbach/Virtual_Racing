@@ -1,4 +1,5 @@
 from tensorflow.keras.models import load_model
+import tensorflow.keras.backend as K
 import tensorflow_model_optimization as tfmot
 import numpy as np
 import time
@@ -28,7 +29,7 @@ def prediction2dict(predictions, model_output_names):
                     for _ in range(len(predictions_list))]
     for prediction, output_dict in zip(predictions_list, output_dicts):
         for output_value, output_name in zip(prediction, output_dict):
-            output_dict[output_name] = output_value[0]
+            output_dict[output_name] = K.eval(output_value)
     return output_dicts
 
 
@@ -38,10 +39,9 @@ def predict_decorator(func, model_output_names):
         predictions = func(*args, **kwargs)
         output_dicts = prediction2dict(predictions, model_output_names)
         et = time.time()
-        return (output_dicts, et-st)
+        return output_dicts, et-st
     return wrapped_f
 
 
 def apply_predict_decorator(model):
-    model.predict = predict_decorator(
-        model.predict, get_model_output_names(model))
+    model.predict = predict_decorator(model, get_model_output_names(model))
