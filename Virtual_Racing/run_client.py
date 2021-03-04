@@ -1,20 +1,21 @@
 import base64
 import json
+import os
 import threading
 import time
+from collections.abc import Iterable
 from io import BytesIO
-import os
 
 import cv2
 import keyboard
 import numpy as np
 import tensorflow
+from custom_modules.datasets import dataset_json
+from gym_donkeycar.core.sim_client import SDClient
 from PIL import Image
 from tensorflow.keras.models import load_model
 
 import model_utils
-from custom_modules.datasets import dataset_json
-from gym_donkeycar.core.sim_client import SDClient
 from utils import add_random, cat2linear, opt_acc, transform_st
 from visual_interface import AutoInterface, windowInterface
 
@@ -78,7 +79,9 @@ class SimpleClient(SDClient):
 
                 del json_packet["image"]
                 self.last_packet = json_packet
-                # print(self.last_packet)
+
+            else:
+                print(json_packet)
 
         except:
             if json_packet != {}:
@@ -122,7 +125,7 @@ class SimpleClient(SDClient):
             if body_msg == '':
                 msg = {
                     "msg_type": "car_config",
-                    "body_style": "cybertruck",
+                    "body_style": "donkey",
                     "body_r": str(color[0]),
                     "body_g": str(color[1]),
                     "body_b": str(color[2]),
@@ -218,12 +221,24 @@ class SimpleClient(SDClient):
         img = self.prepare_img(img)
         # to_pred = [np.expand_dims(img, axis=0)/255]
 
-        to_pred = self.dataset.make_to_pred_annotations([img], [[0, self.current_speed]], input_components)
+        to_pred = self.dataset.make_to_pred_annotations(
+            [img], [[0, self.current_speed]], input_components)
         pred, dt = self.model.predict(to_pred)
         pred = pred[0]
 
-        direction = pred.get('direction', None)[0]
-        throttle = pred.get('throttle', None)[0]
+        direction = None
+        throttle = None
+
+        if 'direction' in pred:
+            direction = pred.get('direction', None)
+            if isinstance(direction, Iterable):
+                direction = direction[0]
+
+        if 'throttle' in pred:
+            throttle = pred.get('throttle', None)
+            if isinstance(throttle, Iterable):
+                throttle = throttle[0]
+
         # assert direction is not None
 
         if throttle is None:
@@ -236,7 +251,7 @@ class SimpleClient(SDClient):
         if transform:
             direction = transform_st(direction, sq, mult)
 
-        self.update(direction, throttle=throttle*0.85, brake=0)
+        self.update(direction, throttle=throttle, brake=0)
         self.previous_st = direction
 
     def get_keyboard(self, keys=["left", "up", "right"], bkeys=["down"]):
@@ -350,6 +365,7 @@ class universal_client(SimpleClient):
                 cv2.imshow(self.name, self.iter_image)
                 cv2.waitKey(1)
 
+
                 if self.aborted:
                     self.stop()
                     print("stopped client", self.name)
@@ -447,7 +463,7 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = model_utils.safe_load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\rbrl_sim7.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\warren.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     model.summary()
 
@@ -456,7 +472,7 @@ if __name__ == "__main__":
     input_components = [1]
 
     hosts = ['127.0.0.1', 'donkey-sim.roboticist.dev', 'sim.diyrobocars.fr']
-    host = hosts[-1]
+    host = hosts[0]
     port = 9091
 
     window = windowInterface()  # create a window
@@ -467,10 +483,10 @@ if __name__ == "__main__":
         'window': window,
         'use_speed': (True, True),
         'sleep_time': 0.01,
-        'PID_settings': [17, 1.0, 0.45, 1.3, 1.1],
-        'loop_settings': [True, False, False, False, False, True],
+        'PID_settings': [17, 0.5, 0.3, 1.0, 1.0],
+        'loop_settings': [True, False, False, True, False, True],
         'buffer_time': 11,
-        'track': 'roboracingleague_1',
+        'track': 'warren',
         'model': model,
         'dataset': dataset,
         'input_components': input_components
