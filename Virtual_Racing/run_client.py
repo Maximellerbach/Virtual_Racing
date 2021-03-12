@@ -80,6 +80,10 @@ class SimpleClient(SDClient):
                 del json_packet["image"]
                 self.last_packet = json_packet
 
+                # if "lidar" in json_packet and json_packet["lidar"] is not None:
+                #     print(len(json_packet["lidar"]), time.time())
+                # else: print(0, time.time())
+
             else:
                 print(json_packet)
 
@@ -159,43 +163,10 @@ class SimpleClient(SDClient):
             self.send_now(dumped_msg)
             time.sleep(1.0)
 
-    def startv2(self, name='Maxime', cam_msg='', color=[20, 20, 20]):
-        '''
-        send three config messages to setup car, racer, and camera
-        '''
-        racer_name = "Maxime Ellerbach"
-        car_name = name+'_'+self.name
-        bio = "I race robots."  # TODO
-        country = "France"
-
-        # Racer info
-        msg = {'msg_type': 'racer_info',
-               'racer_name': racer_name,
-               'car_name': car_name,
-               'bio': bio,
-               'country': country}
-        self.send_now(json.dumps(msg))
-        print("sended racer info")
-
-        # Car config
-        msg = {
-            "msg_type": "car_config",
-            "body_style": "f1",
-            "body_r": str(color[0]),
-            "body_g": str(color[1]),
-            "body_b": str(color[2]),
-            "car_name": f'Maxime_{self.name}',
-            "font_size": "50"}
-        self.send_now(json.dumps(msg))
-        print("sended body info")
-
-        # this sleep gives the car time to spawn. Once it's spawned, it's ready for the camera config.
-        time.sleep(0.1)
-
-        # using default cam
-        msg = '{ "msg_type" : "cam_config", "fov" : "90", "fish_eye_x" : "0.4", "fish_eye_y" : "0.0", "img_w" : "160", "img_h" : "120", "img_d" : "3", "img_enc" : "JPG", "offset_x" : "0.0", "offset_y" : "1.120395", "offset_z" : "0.5528488", "rot_x" : "15.0" }'
-        self.send_now(msg)
-        print("sended cam info")
+        # send lidar settings (debug purpose)
+        # msg = '{ "msg_type" : "lidar_config", "degPerSweepInc" : "2.0", "degAngDown" : "0", "degAngDelta" : "-1.0", "numSweepsLevels" : "1", "maxRange" : "50.0", "noise" : "0.4", "offset_x" : "0.0", "offset_y" : "0.5", "offset_z" : "0.5", "rot_x" : "0.0" }'
+        # self.send_now(msg)
+        # time.sleep(0.2)
 
     def send_controls(self, steering, throttle, brake):
         p = {"msg_type": "control",
@@ -292,11 +263,6 @@ class SimpleClient(SDClient):
         if color == []:
             color = np.random.randint(0, 255, size=(3))
         self.startv1(color=color)
-
-    def rdm_color_startv2(self, color=[]):
-        if color == []:
-            color = np.random.randint(0, 255, size=(3))
-        self.startv2(color=color)
 
     def save_img(self, img, **to_save):
         # print("SAVING")
@@ -463,7 +429,7 @@ class log_points(SimpleClient):
 
 if __name__ == "__main__":
     model = model_utils.safe_load_model(
-        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\warren.h5', compile=False)
+        'C:\\Users\\maxim\\GITHUB\\AutonomousCar\\test_model\\models\\test_scene.h5', compile=False)
     model_utils.apply_predict_decorator(model)
     model.summary()
 
@@ -493,7 +459,7 @@ if __name__ == "__main__":
     }
 
     load_map = True
-    client_number = 1
+    client_number = 3
     for i in range(client_number):
         universal_client(config, load_map, str(i))
         # log_points()
